@@ -1,0 +1,75 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyAlwaysOnCompute",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:CreateNatGateway",
+        "ec2:AllocateAddress",
+        "ec2:CreateVpcEndpoint",
+        "ecs:CreateService",
+        "ecs:RunTask",
+        "eks:CreateCluster",
+        "lightsail:CreateInstances",
+        "apprunner:CreateService",
+        "elasticloadbalancing:CreateLoadBalancer"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyExpensiveDataServices",
+      "Effect": "Deny",
+      "Action": [
+        "aoss:CreateCollection",
+        "es:CreateDomain",
+        "es:CreateElasticsearchDomain",
+        "rds:CreateDBInstance",
+        "rds:CreateDBCluster",
+        "redshift:CreateCluster",
+        "redshift-serverless:CreateWorkgroup",
+        "elasticache:CreateCacheCluster",
+        "elasticache:CreateReplicationGroup",
+        "elasticache:CreateServerlessCache",
+        "kafka:CreateCluster",
+        "kafka:CreateClusterV2",
+        "kinesis:CreateStream",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:CreateNotebookInstance",
+        "sagemaker:CreateDomain",
+        "elasticmapreduce:RunJobFlow"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyWafWebAcls",
+      "Effect": "Deny",
+      "Action": [
+        "wafv2:CreateWebACL",
+        "waf:CreateWebACL",
+        "waf-regional:CreateWebACL"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyBedrockProvisionedAndTraining",
+      "Effect": "Deny",
+      "Action": [
+        "bedrock:CreateProvisionedModelThroughput",
+        "bedrock:CreateModelCustomizationJob",
+        "bedrock:CreateModelInvocationJob"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OnlyTitanEmbeddingModels",
+      "Effect": "Deny",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "NotResource": "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-*"
+    }
+  ]
+}
