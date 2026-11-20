@@ -129,3 +129,38 @@ You should get a 401 without a token, then your profile back from both the PUT a
 **Before the demo:** remove `ALLOW_USER_PASSWORD_AUTH` from the `vl-web` app client.
 
 Built by: Ahmad  Date: 18–19 Nov 2026
+
+
+---
+
+## Opportunities schema — agreed interface (planned)
+
+Defined by: Malek Takieddine
+Date: 20 Nov 2026
+Status: Proposed; not deployed
+
+Account: NGO (281780646139)
+Region: us-east-1
+Table: vl-opportunities
+Partition key: opportunityId (String)
+
+| Field | Type | Purpose |
+|---|---|---|
+| opportunityId | String | Backend-generated UUID |
+| ngoId | String | Owning NGO; assigned and checked by backend |
+| title | String | Opportunity title |
+| description | String | Activities and requirements |
+| location | String | Location in Lebanon |
+| skills | List of strings | Required skills, lowercase and deduplicated |
+| startAt | String | Start time in UTC, ISO 8601 |
+| endAt | String | End time in UTC, ISO 8601 |
+| capacity | Number | Maximum accepted volunteers |
+| status | String | open, closed, or cancelled |
+| isCrisis | Boolean | Urgent crisis-response opportunity |
+| createdAt | String | Backend-generated UTC timestamp |
+| updatedAt | String | Backend-generated UTC timestamp |
+
+Only approved NGOs may create opportunities.
+The backend enforces ownership for updates.
+AI embeddings are managed separately by Tarek; clients cannot set them.
+Application decisions and accepted-slot tracking are coordinated with Ahmad.
