@@ -294,3 +294,11 @@ Backend is local only; not deployed to ECS.
 
 NGO/admin successful-access tests remain pending.
 NGO approval and opportunity ownership checks are not implemented yet.
+
+## Successful role-access tests — Malek Takieddine — 2026-11-22
+
+- Created separate Cognito test users in the ngo and admin groups.
+- Verified the NGO user's /ngo/access request succeeded.
+- Verified the admin user's /admin/access request succeeded.
+- Earlier volunteer tests rejected both restricted routes.
+- Group membership alone does not constitute NGO approval.
