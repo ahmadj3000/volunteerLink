@@ -205,3 +205,31 @@ Region: us-east-1
 Pages remain placeholders pending backend integration.
 Frontend route guards do not replace backend authorization.
 S3/CloudFront hosting is not yet deployed.
+
+## Frontend hosting — Malek Takieddine — 2026-11-21
+
+Account: NGO (281780646139)
+S3 region: us-east-1
+Built manually through the AWS console.
+
+### Resources and settings
+- S3 bucket: vl-frontend-281780646139-us-east-1-an
+- Uploaded frontend/dist contents to the bucket root.
+- CloudFront distribution: E9RPPZQ6B75BA
+- Default root object: index.html
+- Viewer protocol policy: Redirect HTTP to HTTPS.
+- WAF and Origin Shield disabled.
+- Billing: pay-as-you-go.
+- Bucket policy grants cloudfront.amazonaws.com s3:GetObject
+  only for this distribution's source ARN:
+  arn:aws:cloudfront::281780646139:distribution/E9RPPZQ6B75BA
+
+### Verification
+- Hosted frontend loaded through CloudFront.
+- Cognito sign-in succeeded; volunteer navigation appeared.
+- Direct unsigned S3 request to index.html returned AccessDenied.
+- Confirmed HTTP-to-HTTPS redirect is selected in CloudFront.
+
+### Remaining work
+- Pages remain placeholders pending backend API integration.
+- Frontend route guards do not replace backend authorization.
