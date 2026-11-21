@@ -1,132 +1,189 @@
-import { useState } from 'react'
-import { signIn, signOut, confirmSignIn } from 'aws-amplify/auth'
+import { useEffect, useState } from 'react'
+import { fetchAuthSession, signOut } from 'aws-amplify/auth'
+import { Hub } from 'aws-amplify/utils'
+import {
+  HashRouter,
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+} from 'react-router-dom'
+import LoginScreen from './LoginScreen'
+import Opportunities from './pages/malek/Opportunities'
+import NgoDashboard from './pages/malek/NgoDashboard'
+import AdminDashboard from './pages/malek/AdminDashboard'
+import Applications from './pages/ahmad/Applications'
+import Applicants from './pages/ahmad/Applicants'
+import Recommendations from './pages/tarek/Recommendations'
 import './App.css'
 
 export default function App() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [signedIn, setSignedIn] = useState(false)
-  const [message, setMessage] = useState('')
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [needsNewPassword, setNeedsNewPassword] = useState(false)
+  const [error, setError] = useState('')
 
-  async function handleLogin(event) {
-    event.preventDefault()
-    setBusy(true)
-    setMessage('')
+  useEffect(() => {
+    let active = true
+    let revision = 0
 
-    try {
-      const result = needsNewPassword
-        ? await confirmSignIn({ challengeResponse: password })
-        : await signIn({
-            username: email.trim(),
-            password,
-          })
-
-      setPassword('')
-
-      if (result.isSignedIn) {
-        setSignedIn(true)
-        setNeedsNewPassword(false)
-      } else if (
-        result.nextStep.signInStep ===
-        'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED'
-      ) {
-        setNeedsNewPassword(true)
-        setMessage(
-          'Choose a permanent password: at least 10 characters, including uppercase, lowercase, and a number.'
-        )
-      } else {
-        setMessage(
-          `Additional sign-in step: ${result.nextStep.signInStep}`
-        )
+    async function loadSession() {
+      const current = ++revision
+      try {
+        const next = await fetchAuthSession()
+        if (active && current === revision) {
+          setSession(next.tokens ? next : null)
+          setError('')
+        }
+      } catch {
+        if (active && current === revision) {
+          setSession(null)
+          setError('Your session could not be restored. Please sign in again.')
+        }
+      } finally {
+        if (active && current === revision) setLoading(false)
       }
-    } catch (error) {
-      setPassword('')
-      setMessage(error.message || 'Sign-in failed.')
+    }
+
+    const stop = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signedIn') {
+        void loadSession()
+      } else if (
+        payload.event === 'signedOut' ||
+        payload.event === 'tokenRefresh_failure'
+      ) {
+        revision += 1
+        if (active) {
+          setSession(null)
+          setLoading(false)
+        }
+      }
+    })
+
+    void loadSession()
+
+    return () => {
+      active = false
+      stop()
+    }
+  }, [])
+
+  async function logout() {
+    setBusy(true)
+    setError('')
+    try {
+      await signOut()
+      setSession(null)
+    } catch {
+      setError('Could not sign out. Please try again.')
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleLogout() {
-    setBusy(true)
-    setMessage('')
+  if (loading) {
+    return <div className="loading" role="status">Opening VolunteerLink…</div>
+  }
 
-    try {
-      await signOut()
-      setSignedIn(false)
-      setNeedsNewPassword(false)
-      setPassword('')
-    } catch (error) {
-      setMessage(error.message || 'Sign-out failed.')
-    } finally {
-      setBusy(false)
-    }
+  if (!session) {
+    return (
+      <div className="login-layout">
+        {error && <p role="alert">{error}</p>}
+        <LoginScreen />
+      </div>
+    )
+  }
+
+  const claims = session.tokens.accessToken.payload
+  const rawGroups = claims['cognito:groups']
+  const groups = Array.isArray(rawGroups) ? rawGroups : []
+  const isAdmin = groups.includes('admin')
+  const isNgo = groups.includes('ngo')
+  const isVolunteer = groups.includes('volunteer')
+  const email = session.tokens.idToken?.payload.email || 'Signed-in user'
+
+  function restricted(allowed, page) {
+    return allowed ? page : <Navigate to="/" replace />
   }
 
   return (
-    <main>
-      <h1>VolunteerLink</h1>
-      <p>Connecting volunteers and NGOs across Lebanon.</p>
+    <HashRouter>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <NavLink className="brand" to="/">VolunteerLink<span>LEBANON</span></NavLink>
+          <p className="sidebar-caption">Small actions. Shared impact.</p>
 
-      {signedIn ? (
-        <section>
-          <h2>You’re signed in</h2>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={busy}
-          >
-            {busy ? 'Signing out…' : 'Sign out'}
-          </button>
-        </section>
-      ) : (
-        <form onSubmit={handleLogin}>
-          <h2>
-            {needsNewPassword ? 'Set your password' : 'Sign in'}
-          </h2>
+          <nav aria-label="Main navigation">
+            <NavLink to="/" end>Explore opportunities</NavLink>
+            {isVolunteer && (
+              <>
+                <NavLink to="/recommendations">Recommended for you</NavLink>
+                <NavLink to="/applications">My applications</NavLink>
+              </>
+            )}
+            {isNgo && (
+              <>
+                <NavLink to="/ngo">NGO dashboard</NavLink>
+                <NavLink to="/applicants">Review applicants</NavLink>
+              </>
+            )}
+            {isAdmin && <NavLink to="/admin">NGO approvals</NavLink>}
+          </nav>
 
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={busy || needsNewPassword}
-              required
-            />
-          </label>
+          <div className="sidebar-footer">
+            <span className="eyebrow">YOUR ACCOUNT</span>
+            <p className="account-email">{String(email)}</p>
+            <span className="badge">
+              {groups.length ? groups.join(' · ') : 'No role assigned'}
+            </span>
+            <button className="secondary" onClick={logout} disabled={busy}>
+              {busy ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        </aside>
 
-          <label>
-            {needsNewPassword ? 'New password' : 'Password'}
-            <input
-              type="password"
-              autoComplete={
-                needsNewPassword
-                  ? 'new-password'
-                  : 'current-password'
-              }
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={busy}
-              minLength={needsNewPassword ? 10 : undefined}
-              required
-            />
-          </label>
+        <main className="workspace">
+          <header className="topbar">
+            <span>Community starts with you.</span>
+            <span className="badge">Lebanon</span>
+          </header>
 
-          <button type="submit" disabled={busy}>
-            {busy
-              ? 'Please wait…'
-              : needsNewPassword
-                ? 'Save password'
-                : 'Sign in'}
-          </button>
-        </form>
-      )}
+          <div className="hero">
+            <span className="eyebrow">TOGETHER, WE SHOW UP</span>
+            <h1>Your time can make<br />a difference.</h1>
+            <p>Connect with local NGOs. Put your skills into action.</p>
+          </div>
 
-      {message && <p role="alert">{message}</p>}
-    </main>
+          {!groups.length && (
+            <p className="notice">
+              You’re signed in. Your account has no application role yet.
+              Role-specific pages will appear once a role is assigned.
+            </p>
+          )}
+
+          {error && <p role="alert">{error}</p>}
+
+          <Routes>
+            <Route path="/" element={<Opportunities />} />
+            <Route path="/recommendations" element={
+              restricted(isVolunteer, <Recommendations />)
+            } />
+            <Route path="/applications" element={
+              restricted(isVolunteer, <Applications />)
+            } />
+            <Route path="/ngo" element={
+              restricted(isNgo, <NgoDashboard />)
+            } />
+            <Route path="/applicants" element={
+              restricted(isNgo, <Applicants />)
+            } />
+            <Route path="/admin" element={
+              restricted(isAdmin, <AdminDashboard />)
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </HashRouter>
   )
 }

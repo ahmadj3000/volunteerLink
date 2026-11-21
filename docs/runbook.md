@@ -185,3 +185,23 @@ Date: 21 Nov 2026
 
 Remaining: session restoration after refresh, role-aware routing,
 and frontend deployment to S3/CloudFront.
+---
+
+## Frontend shell and volunteer role verification
+
+Built by: Malek Takieddine
+Date: 21 Nov 2026
+AWS account: NGO — 281780646139
+Region: us-east-1
+
+- Added session restoration, sidebar navigation, and HashRouter routes.
+- Created separate page folders for Malek, Ahmad, and Tarek.
+- Assigned the existing test user to the Cognito volunteer group.
+- Signed out and back in to obtain tokens containing the group.
+- Verified volunteer navigation appears.
+- Verified /#/admin redirects the volunteer to /#/.
+- Production build and ESLint passed.
+
+Pages remain placeholders pending backend integration.
+Frontend route guards do not replace backend authorization.
+S3/CloudFront hosting is not yet deployed.
