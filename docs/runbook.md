@@ -250,3 +250,15 @@ Region: us-east-1
 - Verified table Active and PITR On.
 - PITR incurs additional charges.
 - Backend integration is not yet implemented.
+
+## NGO backend container — Malek Takieddine — 2026-11-22
+
+- Created FastAPI backend in backend/ngo/.
+- Added Dockerfile using Python 3.13 and a non-root application user.
+- Built local image: vl-ngo-api:dev.
+- Ran the container with port 8000 bound to localhost.
+- Verified GET /health returned:
+  {"status":"ok","service":"vl-ngo-api"}
+
+Local verification only. Not deployed to ECS.
+Cognito authorization and DynamoDB integration are not implemented yet.
