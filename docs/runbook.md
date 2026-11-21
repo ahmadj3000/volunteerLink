@@ -233,3 +233,20 @@ Built manually through the AWS console.
 ### Remaining work
 - Pages remain placeholders pending backend API integration.
 - Frontend route guards do not replace backend authorization.
+
+## Opportunities table — Malek Takieddine — 2026-11-21
+
+Built manually in the AWS console.
+Account: NGO (281780646139)
+Region: us-east-1
+
+- Table: vl-opportunities
+- Partition key: opportunityId (String)
+- No sort key or secondary indexes.
+- Capacity: On-demand.
+- Table class: DynamoDB Standard.
+- Encryption: AWS-owned key.
+- Enabled point-in-time recovery with a 35-day recovery period.
+- Verified table Active and PITR On.
+- PITR incurs additional charges.
+- Backend integration is not yet implemented.
