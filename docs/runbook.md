@@ -281,3 +281,16 @@ Verified:
 
 Role authorization and DynamoDB integration are not implemented yet.
 Backend is local only; not deployed to ECS.
+
+## Backend role checks — Malek Takieddine — 2026-11-22
+
+- Added group-protected GET /ngo/access and GET /admin/access.
+- Groups come from the verified Cognito access token.
+- Tested with the volunteer account:
+  - /me succeeded.
+  - /ngo/access rejected access: ngo role required.
+  - /admin/access rejected access: admin role required.
+- Added development-only frontend buttons for these checks.
+
+NGO/admin successful-access tests remain pending.
+NGO approval and opportunity ownership checks are not implemented yet.

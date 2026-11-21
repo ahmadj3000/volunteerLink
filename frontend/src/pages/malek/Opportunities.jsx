@@ -6,7 +6,7 @@ export default function Opportunities() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
 
-  async function testBackend() {
+  async function testBackend(endpoint = '/me') {
     setBusy(true)
     setResult(null)
     setError('')
@@ -19,7 +19,7 @@ export default function Opportunities() {
         throw new Error('Please sign in first.')
       }
 
-      const response = await fetch('/api/ngo/me', {
+      const response = await fetch(`/api/ngo${endpoint}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -66,8 +66,18 @@ export default function Opportunities() {
       {import.meta.env.DEV && (
         <div>
           <h3>Local backend connection test</h3>
-          <button type="button" onClick={testBackend} disabled={busy}>
+          <button type="button" onClick={() => testBackend('/me')} disabled={busy}>
             {busy ? 'Checking…' : 'Test authenticated backend'}
+          </button>
+
+          
+          <button type="button"
+            onClick={() => testBackend('/ngo/access')} disabled={busy}>
+            Test NGO access
+          </button>
+          <button type="button"
+            onClick={() => testBackend('/admin/access')} disabled={busy}>
+            Test admin access
           </button>
 
           {error && <p role="alert">{error}</p>}
