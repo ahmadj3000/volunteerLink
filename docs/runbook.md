@@ -164,3 +164,24 @@ Only approved NGOs may create opportunities.
 The backend enforces ownership for updates.
 AI embeddings are managed separately by Tarek; clients cannot set them.
 Application decisions and accepted-slot tracking are coordinated with Ahmad.
+
+
+---
+
+## Frontend — Cognito login
+
+Built by: Malek Takieddine
+Date: 21 Nov 2026
+
+- Created React frontend with Vite in frontend/.
+- Installed aws-amplify and react-router-dom.
+- Configured existing Cognito pool us-east-1_is9qkiZoh
+  and app client 6blnjutulha6k2gr0d1lf5fe9f.
+- Implemented sign-in, new-password challenge, and sign-out.
+- Created a manually verified Cognito test user.
+- Verified initial sign-in and temporary-password replacement locally
+  at http://localhost:5173.
+- No Lambda or ECS backend is involved in this login flow.
+
+Remaining: session restoration after refresh, role-aware routing,
+and frontend deployment to S3/CloudFront.
