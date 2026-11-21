@@ -262,3 +262,22 @@ Region: us-east-1
 
 Local verification only. Not deployed to ECS.
 Cognito authorization and DynamoDB integration are not implemented yet.
+
+## NGO backend authentication — Malek Takieddine — 2026-11-22
+
+- Added Cognito access-token verification to the Docker backend.
+- Checks RS256 signature using the pool's published signing keys,
+  token expiry, issuer, token_use=access, and app client_id.
+- GET /health remains public.
+- GET /me requires a valid access token and returns userId and groups.
+- Added a local Vite proxy to the backend.
+- Added a development-only frontend authentication test button.
+
+Verified:
+- Request without a token was rejected.
+- Signed-in frontend request succeeded and returned the test user's
+  Cognito sub and volunteer group.
+- Frontend production build and ESLint passed.
+
+Role authorization and DynamoDB integration are not implemented yet.
+Backend is local only; not deployed to ECS.
