@@ -302,3 +302,43 @@ NGO approval and opportunity ownership checks are not implemented yet.
 - Verified the admin user's /admin/access request succeeded.
 - Earlier volunteer tests rejected both restricted routes.
 - Group membership alone does not constitute NGO approval.
+
+## NGO registration and approval — Malek Takieddine — 2026-11-22
+
+### AWS resources
+- Created vl-ngos manually in NGO account 281780646139, us-east-1.
+- Partition key: ngoId (String); no sort key.
+- Capacity: On-demand; encryption: AWS-owned key.
+- Created local development role vl-ngo-dev.
+- Trust policy permits the existing NGO SSO administrator role to assume it.
+- Inline policy vl-ngo-dev-data allows GetItem, PutItem, UpdateItem,
+  and Scan on vl-ngos and vl-opportunities only.
+- Configured CLI profiles vl-ngo and vl-ngo-dev.
+- Verified assumed-role identity and DynamoDB access from Docker.
+
+### Implementation
+- GET /ngo/registration: NGO reads its own registration.
+- POST /ngo/registration: creates a pending registration.
+- ngoId comes from the verified Cognito sub.
+- Client-supplied status and unknown fields are rejected.
+- Conditional creation prevents overwriting an existing registration.
+- GET /admin/ngos: admin-only listing, paginated.
+- PATCH /admin/ngos/{ngoId}: admin approves or rejects a pending NGO.
+- Records reviewer identity and review timestamp.
+- Prevents self-review and repeat review of an already decided registration.
+- Connected NGO and admin dashboards.
+- Added scripts/run-ngo-local.py to pass temporary limited-role
+  credentials to Docker without writing them to project files.
+
+### Verification
+- NGO registration submitted successfully.
+- Admin approval succeeded.
+- NGO dashboard retrieved approved status from DynamoDB.
+- Frontend production build and ESLint passed.
+
+### Remaining
+- Rejection flow and additional authorization/validation tests.
+- Registration editing and resubmission.
+- Opportunity posting with backend approval and ownership enforcement.
+- ECS deployment; backend currently runs locally in Docker.
+- Updated frontend has not been uploaded to S3/CloudFront.
