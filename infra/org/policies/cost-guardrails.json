@@ -11,10 +11,18 @@
         "ec2:CreateVpcEndpoint",
         "eks:CreateCluster",
         "lightsail:CreateInstances",
-        "apprunner:CreateService",
-        "elasticloadbalancing:CreateLoadBalancer"
+        "apprunner:CreateService"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "DenyInternetFacingLoadBalancers",
+      "Effect": "Deny",
+      "Action": "elasticloadbalancing:CreateLoadBalancer",
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": { "elasticloadbalancing:Scheme": "internal" }
+      }
     },
     {
       "Sid": "DenyExpensiveDataServices",
@@ -43,11 +51,7 @@
     {
       "Sid": "DenyWafWebAcls",
       "Effect": "Deny",
-      "Action": [
-        "wafv2:CreateWebACL",
-        "waf:CreateWebACL",
-        "waf-regional:CreateWebACL"
-      ],
+      "Action": ["wafv2:CreateWebACL", "waf:CreateWebACL", "waf-regional:CreateWebACL"],
       "Resource": "*"
     },
     {
@@ -63,10 +67,7 @@
     {
       "Sid": "OnlyTitanEmbeddingModels",
       "Effect": "Deny",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ],
+      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       "NotResource": "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-*"
     }
   ]
