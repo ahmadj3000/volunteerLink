@@ -9,8 +9,6 @@
         "ec2:CreateNatGateway",
         "ec2:AllocateAddress",
         "ec2:CreateVpcEndpoint",
-        "ecs:CreateService",
-        "ecs:RunTask",
         "eks:CreateCluster",
         "lightsail:CreateInstances",
         "apprunner:CreateService",

@@ -62,7 +62,7 @@ locals {
       file        = "${path.module}/policies/region-lock.json"
     }
     cost-guardrails = {
-      description = "Block budget traps: EC2, NAT, Fargate, OpenSearch, RDS, WAF, Bedrock non-embedding models"
+      description = "Block budget traps: EC2 instances, NAT, OpenSearch, RDS, WAF, Bedrock non-embedding models (ECS Fargate allowed)"
       file        = "${path.module}/policies/cost-guardrails.json"
     }
   }
