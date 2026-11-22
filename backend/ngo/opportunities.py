@@ -96,3 +96,43 @@ def create_opportunity(
         ConditionExpression="attribute_not_exists(opportunityId)",
     )
     return {"opportunity": item}
+
+
+@router.get("/opportunities")
+def list_opportunities(
+    cursor: str | None = None,
+    user: dict = Depends(current_user),
+):
+    from uuid import UUID
+    from boto3.dynamodb.conditions import Attr
+
+    scan_options = {
+        "Limit": 25,
+        "FilterExpression": Attr("status").eq("open"),
+        "ProjectionExpression": (
+            "opportunityId, title, description, #location, skills, "
+            "startAt, endAt, #capacity, isCrisis"
+        ),
+        "ExpressionAttributeNames": {
+            "#location": "location",
+            "#capacity": "capacity",
+        },
+        "ConsistentRead": True,
+    }
+
+    if cursor is not None:
+        try:
+            UUID(cursor)
+        except ValueError:
+            raise HTTPException(400, "Invalid pagination cursor.")
+        scan_options["ExclusiveStartKey"] = {"opportunityId": cursor}
+
+    table = boto3.resource("dynamodb", region_name="us-east-1").Table(
+        "vl-opportunities"
+    )
+    response = table.scan(**scan_options)
+
+    return {
+        "items": response.get("Items", []),
+        "nextCursor": response.get("LastEvaluatedKey", {}).get("opportunityId"),
+    }

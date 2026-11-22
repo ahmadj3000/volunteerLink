@@ -359,3 +359,14 @@ Verified:
 Restricted posting tests remain pending.
 Opportunity listing, editing, and closing are not implemented yet.
 Backend remains local; not deployed to ECS.
+
+## Opportunity browsing — Malek Takieddine — 2026-11-22
+
+- Added authenticated GET /opportunities with pagination.
+- Returns open opportunities and selected display fields.
+- Connected Explore opportunities to the backend.
+- Fixed the DynamoDB reserved-word alias for capacity.
+- Verified "Animal shelter support" appears for both NGO and volunteer accounts.
+
+Editing, closing, and restricted-posting tests remain pending.
+Backend remains local.
