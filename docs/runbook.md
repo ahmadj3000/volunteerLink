@@ -370,3 +370,17 @@ Backend remains local; not deployed to ECS.
 
 Editing, closing, and restricted-posting tests remain pending.
 Backend remains local.
+
+## NGO opportunity management — Malek Takieddine — 2026-11-22
+
+- Added a paginated list of the signed-in NGO's opportunities.
+- Added closing with backend checks for ownership, open status,
+  and the expected updatedAt value.
+- Closing preserves the database record.
+- Verified Animal shelter support changed to closed in the NGO
+  dashboard and disappeared from Explore opportunities.
+- Added dashboard form styling and button spacing.
+- Frontend production build and ESLint passed.
+
+Cross-NGO ownership rejection tests and editing remain pending.
+Backend remains local.

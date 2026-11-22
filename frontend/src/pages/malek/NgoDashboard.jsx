@@ -1,3 +1,4 @@
+import OwnOpportunities from './OwnOpportunities'
 import PostOpportunity from './PostOpportunity'
 import { useEffect, useState } from 'react'
 import { ngoApi } from '../../lib/ngo-api'
@@ -63,7 +64,12 @@ export default function NgoDashboard() {
           <p>Location: {ngo.location}</p>
           <p><strong>Approval status: {ngo.status}</strong></p>
           {ngo.status === 'pending' && <p>An administrator will review your registration.</p>}
-          {ngo.status === 'approved' && <PostOpportunity />}
+          {ngo.status === 'approved' && (
+            <>
+              <PostOpportunity />
+              <OwnOpportunities />
+            </>
+          )}
           {ngo.status === 'rejected' && <p>Your registration was rejected. Contact an administrator.</p>}
         </div>
       ) : !error ? (

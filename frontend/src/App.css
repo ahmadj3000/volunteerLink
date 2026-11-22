@@ -70,3 +70,115 @@ nav a.active { background: #eaf2eb; color: #24664e; font-weight: 700; }
   .hero { padding: 36px 0; }
   .panel { padding: 24px; }
 }
+
+/* Dashboard forms and spacing */
+button, input, textarea, select {
+  font: inherit;
+}
+
+.panel form {
+  margin: 24px 0;
+}
+
+.panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 20px;
+}
+
+.panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.panel input:not([type="checkbox"]),
+.panel textarea,
+.panel select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #cbd7ce;
+  border-radius: 10px;
+  background: #fbfcfa;
+  color: #183b32;
+}
+
+.panel textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.panel input:focus-visible,
+.panel textarea:focus-visible,
+.panel select:focus-visible {
+  outline: 3px solid #b9d8c5;
+  outline-offset: 2px;
+}
+
+.panel label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.panel input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: #24664e;
+}
+
+.panel button {
+  max-width: 100%;
+  margin: 8px 12px 8px 0;
+  line-height: 1.4;
+}
+
+.panel form button {
+  justify-self: start;
+}
+
+.panel > button:last-child {
+  margin-top: 24px;
+}
+
+.panel section {
+  padding-top: 24px;
+  margin-bottom: 24px;
+}
+
+.panel article {
+  padding: 20px;
+  border: 1px solid #dfe7df;
+  border-radius: 12px;
+  background: #fbfcfa;
+}
+
+.panel article h3,
+.panel article h4 {
+  margin: 0 0 12px;
+}
+
+.panel article p {
+  margin: 8px 0;
+}
+
+.panel article button {
+  margin-top: 16px;
+}
+
+@media (max-width: 480px) {
+  .panel button {
+    width: 100%;
+    margin-right: 0;
+  }
+}

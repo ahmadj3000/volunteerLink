@@ -136,3 +136,94 @@ def list_opportunities(
         "items": response.get("Items", []),
         "nextCursor": response.get("LastEvaluatedKey", {}).get("opportunityId"),
     }
+
+
+class OpportunityClose(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expectedUpdatedAt: str = Field(min_length=1, max_length=80)
+
+
+@router.get("/ngo/opportunities")
+def list_own_opportunities(
+    cursor: str | None = None,
+    user: dict = Depends(approved_ngo),
+):
+    from uuid import UUID
+    from boto3.dynamodb.conditions import Attr
+
+    fields = [
+        "opportunityId", "title", "description", "location", "skills",
+        "startAt", "endAt", "capacity", "isCrisis", "status", "updatedAt",
+    ]
+    names = {f"#f{i}": field for i, field in enumerate(fields)}
+    options = {
+        "Limit": 25,
+        "FilterExpression": Attr("ngoId").eq(user["userId"]),
+        "ProjectionExpression": ", ".join(names),
+        "ExpressionAttributeNames": names,
+        "ConsistentRead": True,
+    }
+    if cursor is not None:
+        try:
+            UUID(cursor)
+        except ValueError:
+            raise HTTPException(400, "Invalid pagination cursor.")
+        options["ExclusiveStartKey"] = {"opportunityId": cursor}
+
+    table = boto3.resource("dynamodb", region_name="us-east-1").Table(
+        "vl-opportunities"
+    )
+    response = table.scan(**options)
+    return {
+        "items": response.get("Items", []),
+        "nextCursor": response.get("LastEvaluatedKey", {}).get("opportunityId"),
+    }
+
+
+@router.patch("/ngo/opportunities/{opportunity_id}/close")
+def close_opportunity(
+    opportunity_id: str,
+    body: OpportunityClose,
+    user: dict = Depends(approved_ngo),
+):
+    from uuid import UUID
+    from botocore.exceptions import ClientError
+
+    try:
+        UUID(opportunity_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid opportunity ID.")
+
+    table = boto3.resource("dynamodb", region_name="us-east-1").Table(
+        "vl-opportunities"
+    )
+    try:
+        table.update_item(
+            Key={"opportunityId": opportunity_id},
+            UpdateExpression="SET #status = :closed, #updated = :now",
+            ConditionExpression=(
+                "attribute_exists(opportunityId) AND ngoId = :owner "
+                "AND #status = :open AND #updated = :expected"
+            ),
+            ExpressionAttributeNames={
+                "#status": "status",
+                "#updated": "updatedAt",
+            },
+            ExpressionAttributeValues={
+                ":owner": user["userId"],
+                ":open": "open",
+                ":closed": "closed",
+                ":expected": body.expectedUpdatedAt,
+                ":now": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except ClientError as error:
+        if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise HTTPException(
+                409,
+                "Cannot close this post. It may have changed, be closed, "
+                "or belong to another NGO. Refresh the list.",
+            )
+        raise
+
+    return {"message": "Opportunity closed."}
