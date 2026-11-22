@@ -12,8 +12,24 @@ const initialForm = {
   isCrisis: false,
 }
 
-export default function PostOpportunity() {
-  const [form, setForm] = useState(initialForm)
+function localDate(value) {
+  const date = new Date(value)
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return shifted.toISOString().slice(0, 16)
+}
+
+export default function PostOpportunity({ opportunity = null, onSaved, onCancel }) {
+  const editing = Boolean(opportunity)
+  const [form, setForm] = useState(() => opportunity ? {
+    title: opportunity.title,
+    description: opportunity.description,
+    location: opportunity.location,
+    skills: (opportunity.skills || []).join(', '),
+    startAt: localDate(opportunity.startAt),
+    endAt: localDate(opportunity.endAt),
+    capacity: String(opportunity.capacity),
+    isCrisis: Boolean(opportunity.isCrisis),
+  } : initialForm)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState(null)
@@ -52,8 +68,11 @@ export default function PostOpportunity() {
 
     setBusy(true)
     try {
-      const data = await ngoApi('/ngo/opportunities', {
-        method: 'POST',
+      const endpoint = editing
+        ? `/ngo/opportunities/${encodeURIComponent(opportunity.opportunityId)}`
+        : '/ngo/opportunities'
+      const data = await ngoApi(endpoint, {
+        method: editing ? 'PATCH' : 'POST',
         body: JSON.stringify({
           title: form.title.trim(),
           description: form.description.trim(),
@@ -63,10 +82,15 @@ export default function PostOpportunity() {
           endAt: end.toISOString(),
           capacity: Number(form.capacity),
           isCrisis: form.isCrisis,
+          ...(editing ? { expectedUpdatedAt: opportunity.updatedAt } : {}),
         }),
       })
-      setCreated(data.opportunity)
-      setForm(initialForm)
+      if (editing) {
+        onSaved(data.opportunity)
+      } else {
+        setCreated(data.opportunity)
+        setForm(initialForm)
+      }
     } catch (error) {
       setError(error.message)
     } finally {
@@ -76,7 +100,7 @@ export default function PostOpportunity() {
 
   return (
     <section style={{ borderTop: '1px solid #ddd', marginTop: 24, paddingTop: 20 }}>
-      <h3>Post an opportunity</h3>
+      <h3>{editing ? 'Edit opportunity' : 'Post an opportunity'}</h3>
       <p>Dates use your device’s local time and are stored in UTC.</p>
       <form onSubmit={submit} style={{ display: 'grid', gap: '1rem', maxWidth: 600 }}>
         <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: '1rem' }}>
@@ -121,7 +145,12 @@ export default function PostOpportunity() {
               onChange={change} style={{ width: 'auto' }} />
             Urgent crisis-response opportunity
           </label>
-          <button type="submit">{busy ? 'Posting…' : 'Post opportunity'}</button>
+          <button type="submit">
+            {busy ? 'Saving…' : editing ? 'Save changes' : 'Post opportunity'}
+          </button>
+          {editing && (
+            <button type="button" onClick={onCancel}>Cancel editing</button>
+          )}
         </fieldset>
       </form>
       {error && <p role="alert">{error}</p>}

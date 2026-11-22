@@ -227,3 +227,76 @@ def close_opportunity(
         raise
 
     return {"message": "Opportunity closed."}
+
+
+class OpportunityEdit(OpportunityCreate):
+    expectedUpdatedAt: str = Field(min_length=1, max_length=80)
+
+
+@router.patch("/ngo/opportunities/{opportunity_id}")
+def edit_opportunity(
+    opportunity_id: str,
+    body: OpportunityEdit,
+    user: dict = Depends(approved_ngo),
+):
+    from uuid import UUID
+    from botocore.exceptions import ClientError
+
+    try:
+        UUID(opportunity_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid opportunity ID.")
+
+    changes = {
+        **body.model_dump(
+            exclude={"startAt", "endAt", "expectedUpdatedAt"}
+        ),
+        "startAt": body.startAt.astimezone(timezone.utc).isoformat(),
+        "endAt": body.endAt.astimezone(timezone.utc).isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    names = {
+        f"#f{i}": field for i, field in enumerate(changes)
+    }
+    values = {
+        f":v{i}": value for i, value in enumerate(changes.values())
+    }
+    names.update({"#status": "status", "#updated": "updatedAt"})
+    values.update({
+        ":owner": user["userId"],
+        ":open": "open",
+        ":expected": body.expectedUpdatedAt,
+    })
+
+    table = boto3.resource("dynamodb", region_name="us-east-1").Table(
+        "vl-opportunities"
+    )
+    try:
+        table.update_item(
+            Key={"opportunityId": opportunity_id},
+            UpdateExpression="SET " + ", ".join(
+                f"#f{i} = :v{i}" for i in range(len(changes))
+            ),
+            ConditionExpression=(
+                "attribute_exists(opportunityId) AND ngoId = :owner "
+                "AND #status = :open AND #updated = :expected"
+            ),
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as error:
+        if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            raise HTTPException(
+                409,
+                "Cannot edit this post. It may have changed, be closed, "
+                "or belong to another NGO. Refresh the list.",
+            )
+        raise
+
+    return {
+        "opportunity": {
+            **changes,
+            "opportunityId": opportunity_id,
+            "status": "open",
+        }
+    }

@@ -384,3 +384,15 @@ Backend remains local.
 
 Cross-NGO ownership rejection tests and editing remain pending.
 Backend remains local.
+
+## Opportunity editing — Malek Takieddine — 2026-11-22
+
+- Reused the posting form to edit existing open opportunities.
+- Backend validates fields and dates.
+- Updates require matching NGO ownership, open status, and updatedAt.
+- Closed opportunities cannot be edited through this feature.
+- Successfully tested editing as the owning NGO.
+- Frontend production build and ESLint passed.
+
+Cross-NGO rejection and concurrent-update tests remain pending.
+Backend remains local; ECS deployment is not yet complete.

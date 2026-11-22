@@ -1,7 +1,9 @@
+import PostOpportunity from './PostOpportunity'
 import { useEffect, useState } from 'react'
 import { ngoApi } from '../../lib/ngo-api'
 
 export default function OwnOpportunities() {
+  const [editing, setEditing] = useState(null)
   const [items, setItems] = useState([])
   const [cursor, setCursor] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -93,6 +95,20 @@ export default function OwnOpportunities() {
             : 'You have no posted opportunities yet.'}
         </p>
       )}
+      {editing && (
+        <PostOpportunity
+          key={editing.opportunityId}
+          opportunity={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={updated => {
+            setItems(previous => previous.map(item =>
+              item.opportunityId === updated.opportunityId ? updated : item
+            ))
+            setEditing(null)
+            setMessage(`Updated: ${updated.title}`)
+          }}
+        />
+      )}
       {items.map(item => (
         <article key={item.opportunityId} style={{ marginTop: 24 }}>
           <h4>{item.title}</h4>
@@ -100,9 +116,24 @@ export default function OwnOpportunities() {
           <p>Starts: {new Date(item.startAt).toLocaleString()}</p>
           <p>Status: <strong>{item.status}</strong></p>
           {item.status === 'open' && (
-            <button onClick={() => close(item)} disabled={busy || loading}>
-              Close opportunity
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setError('')
+                  setMessage('')
+                  setEditing(item)
+                }}
+                disabled={busy || loading || Boolean(editing)}
+              >
+                Edit opportunity
+              </button>
+              <button
+                onClick={() => close(item)}
+                disabled={busy || loading || Boolean(editing)}
+              >
+                Close opportunity
+              </button>
+            </>
           )}
         </article>
       ))}
