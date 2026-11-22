@@ -176,3 +176,7 @@ def review(
         raise
 
     return {"ngo": response["Attributes"]}
+
+
+from opportunities import router as opportunities_router
+app.include_router(opportunities_router)

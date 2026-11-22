@@ -342,3 +342,20 @@ NGO approval and opportunity ownership checks are not implemented yet.
 - Opportunity posting with backend approval and ownership enforcement.
 - ECS deployment; backend currently runs locally in Docker.
 - Updated frontend has not been uploaded to S3/CloudFront.
+
+## Opportunity posting — Malek Takieddine — 2026-11-22
+
+- Added an opportunity form to the approved NGO dashboard.
+- Backend requires the ngo group and checks saved NGO approval.
+- Backend assigns the opportunity ID, owner, status, and timestamps.
+- Validates fields, capacity, and future start/end dates.
+- Converts dates to UTC before storing them in vl-opportunities.
+- Supports an urgent crisis-response flag.
+
+Verified:
+- Approved NGO posted "Animal shelter support" successfully.
+- Frontend production build and ESLint passed.
+
+Restricted posting tests remain pending.
+Opportunity listing, editing, and closing are not implemented yet.
+Backend remains local; not deployed to ECS.
