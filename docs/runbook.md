@@ -396,3 +396,170 @@ Backend remains local.
 
 Cross-NGO rejection and concurrent-update tests remain pending.
 Backend remains local; ECS deployment is not yet complete.
+
+
+
+---
+
+## NGO production deployment and verification — Malek Takieddine — 2026-11-23
+
+This section supersedes earlier statements that the NGO backend is
+local-only or that the NGO frontend integration is not deployed.
+
+### Deployment
+
+Account: NGO — 281780646139
+Region: us-east-1
+
+- Frontend: https://dkd4jyaiba9x9.cloudfront.net
+- S3 bucket: vl-frontend-281780646139-us-east-1-an
+- CloudFront distribution: E9RPPZQ6B75BA
+- NGO API: https://ozb9ner0t1.execute-api.us-east-1.amazonaws.com
+- HTTP API name: vl-ngo-http-api
+- API ID: ozb9ner0t1
+- Stage: $default, automatic deployment enabled.
+- VPC link: vl-ngo-vpc-link (anshq0), verified Available.
+- Internal Application Load Balancer: vl-ngo-api-alb
+- Listener: HTTP 80.
+- Target group: vl-ngo-api-tg, IP targets, HTTP 8000.
+- Health check path: /health.
+- ECS cluster: vl-ngo-cluster
+- ECS service: vl-ngo-api-service
+- Task definition: vl-ngo-api:1
+- Launch type: Fargate, Linux x86_64.
+- ECR image:
+  281780646139.dkr.ecr.us-east-1.amazonaws.com/vl-ngo-api:v1
+- CloudWatch log group: /ecs/vl-ngo-api
+- Task role: vl-ngo-task-role
+- Execution role: vl-ngo-execution-role
+
+The browser connects to API Gateway over HTTPS.
+API Gateway reaches the internal ALB through the VPC link.
+The ALB forwards requests to ECS on port 8000.
+The private backend connections currently use HTTP.
+
+ECS tasks retain public IP assignment for outbound connectivity.
+Removing this requires a separate outbound networking plan.
+
+### Network configuration
+
+VPC: vpc-08152b562c26d5ee3
+
+Subnets:
+- subnet-0884c3516533064a8 — us-east-1a
+- subnet-00935c3f84f0bd048 — us-east-1b
+
+Security groups:
+- VPC link: sg-03c63b11806adb901
+- ALB: sg-07af2bc0df878d0db
+- ECS backend: sg-073c44034476dc9fc
+
+ALB inbound HTTP 80 permits the VPC link security group.
+Backend inbound TCP 8000 permits the ALB security group only.
+Removed the temporary inbound rule permitting the developer's public IP.
+Verified the hosted NGO dashboard still loads afterward.
+
+### API routing and authentication
+
+Routes attached to integration 9iv2txb:
+- GET /{proxy+}
+- POST /{proxy+}
+- PATCH /{proxy+}
+
+Replaced the catch-all $default/ANY routing after OPTIONS requests
+reached FastAPI and returned 405.
+
+Verified CORS preflight now returns HTTP 204.
+
+API Gateway routes use AuthorizationType NONE.
+Authentication and role authorization are enforced in FastAPI using
+verified Cognito access tokens. This does not make protected endpoints public.
+
+GET /health remains public.
+
+### CORS
+
+- Allowed origin: https://dkd4jyaiba9x9.cloudfront.net
+- Allowed headers: authorization, content-type
+- Allowed methods: GET, POST, PATCH, OPTIONS
+- Maximum age: 300 seconds
+- Allow credentials: false
+
+### Frontend deployment commands
+
+Run from frontend/ after signing in to AWS:
+
+    aws sso login --profile vl-ngo
+
+    VITE_NGO_API_URL=https://ozb9ner0t1.execute-api.us-east-1.amazonaws.com npm run build
+
+    aws s3 sync dist/ s3://vl-frontend-281780646139-us-east-1-an/ --profile vl-ngo
+
+    aws cloudfront create-invalidation --distribution-id E9RPPZQ6B75BA --paths "/*" --profile vl-ngo
+
+The API URL is embedded at build time.
+Changing it requires rebuilding and uploading the frontend.
+
+### Verification on the hosted website
+
+Passed:
+- Public HTTPS /health returned status ok.
+- Cognito login succeeded for NGO, admin, and volunteer test accounts.
+- Explore loaded opportunity data.
+- Approved NGO created an opportunity.
+- Owning NGO edited the opportunity.
+- Owning NGO closed the opportunity.
+- Closed opportunities disappeared from Explore.
+- Closed records remained visible in the owner's dashboard.
+- New NGO registration was saved as pending.
+- Pending NGO dashboard did not show the posting form.
+- Admin approved the registration.
+- Approved NGO dashboard unlocked the posting form.
+- Admin rejected another test registration.
+- Rejected NGO dashboard displayed the rejection and no posting form.
+- A second NGO's own-opportunities list excluded the first NGO's records.
+- Volunteer navigation excluded NGO/admin management.
+- Direct frontend navigation to /#/ngo redirected the volunteer away.
+- Unauthenticated GET /ngo/opportunities returned 401.
+- Volunteer-token GET /ngo/opportunities returned 403:
+  "The ngo role is required."
+- Rejected-NGO-token GET /ngo/opportunities returned 403:
+  "Your organization must be approved before posting."
+
+The rejected-NGO result above tested GET access.
+Direct rejected/pending NGO POST attempts have not yet been verified.
+
+### Remaining tests and integration
+
+- Direct cross-NGO edit/close rejection tests.
+- Direct restricted POST tests for pending/rejected NGOs.
+- Concurrent-update conflict tests.
+- Registration editing/resubmission is not implemented.
+- Coordinate volunteer self-signup, email verification, and safe role
+  assignment with Ahmad.
+- Connect Ahmad's applications API to the frontend placeholders.
+- Connect Tarek's recommendation API to the frontend placeholder.
+- Coordinate accepted-slot tracking and capacity updates with Ahmad.
+- Coordinate embedding generation/refresh with Tarek.
+- Reconcile deployed resources with the team's infrastructure ownership
+  rules before changing any Terraform-managed resources.
+- Remove the temporary Cognito USER_PASSWORD_AUTH test flow before
+  the demo, in coordination with Ahmad.
+
+
+
+  ## Additional deployed API tests — Malek — 2026-11-23
+
+- Rejected NGO: direct POST /ngo/opportunities returned 403;
+  approval is required even when bypassing the frontend.
+- Second approved NGO: attempted edit of another NGO's open
+  opportunity returned 409.
+- Second approved NGO: attempted close of that opportunity
+  returned 409.
+- Original owner confirmed the opportunity remained open
+  with its original title, then successfully edited it.
+- Original owner: edit using the previous updatedAt value
+  returned 409, verifying stale-update protection.
+
+These results supersede the corresponding pending-test notes above.
+Pending-NGO POST and simultaneous-request tests remain unverified.
