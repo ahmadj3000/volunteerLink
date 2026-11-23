@@ -158,7 +158,13 @@ backends agree on them.
 
 ## Open points to agree
 
-1. Who writes the two NGO-side applicant routes in `backend/ngo/`. Proposal: Ahmad,
-   as a separate `applications.py` module, reviewed by Malek.
-2. The volunteer **profile page** has no owner yet (the routes exist). Who builds it?
-3. Withdrawing an application is out of scope unless time allows.
+1. The two NGO-side applicant routes in `backend/ngo/` are Ahmad's feature
+   (applicants + decision handling). Ahmad writes them as a separate
+   `applications.py` module; Malek reviews since it's his codebase.
+2. The volunteer **profile page** isn't assigned in the team split. Proposal:
+   Ahmad, since he owns the profile API.
+3. Apply, My applications and NGO applicants pages are Ahmad's in the split.
+   Malek has offered to connect them; Ahmad and Malek to confirm who does it.
+4. Malek: add `GET /internal/opportunities/{opportunityId}` and a
+   `contactEmail` field on NGO registration.
+5. Withdrawing an application is out of scope unless time allows.
