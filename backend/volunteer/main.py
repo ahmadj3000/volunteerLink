@@ -3,7 +3,8 @@
 Modules (one router each, one shared app/entrypoint, one requirements.txt):
   profiles.py      Ahmad  — GET/PUT /me/profile (migrated from Lambda)
   applications.py  Ahmad  — POST /applications, GET /me/applications
-  ngo_client.py    Ahmad  — calls the NGO account's internal API (SigV4 in step 3c)
+  ngo_client.py    Ahmad  — calls the NGO account's internal API (STS + SigV4)
+  internal.py      Ahmad  — /internal/* routes for the NGO backend (IAM-only)
   matching.py      Tarek  — embeddings, cosine ranking, recommendations (next)
 """
 
@@ -12,11 +13,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 import applications
+import internal
 import profiles
 
 app = FastAPI(title="VolunteerLink Volunteer API")
 app.include_router(profiles.router)
 app.include_router(applications.router)
+app.include_router(internal.router)
 
 
 @app.exception_handler(ClientError)

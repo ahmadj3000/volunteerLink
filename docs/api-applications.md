@@ -2,7 +2,7 @@
 
 Defined by: Ahmad Jaber
 Date: 23 Nov 2026
-Status: **Proposed, not implemented.** Formats may change slightly during
+Status: **Volunteer side implemented** (apply, my applications, internal routes); NGO side in progress. Formats may change slightly during
 implementation; any change gets announced and reflected here.
 
 ## Conventions (same as the NGO API)
@@ -142,19 +142,39 @@ nothing extra.
 
 ## Internal cross-account routes (not for the browser)
 
-Signed with IAM (SigV4) using a short-lived STS role. Defined here so both
-backends agree on them.
+Signed with IAM (SigV4) using a short-lived STS role, exposed only on AWS_IAM
+routes. API Gateway overwrites the `x-vl-caller-arn` header with the verified
+caller (`$context.identity.userArn`); the backend accepts only the expected value.
 
-**Volunteer API, called by the NGO backend:**
-- `GET /internal/opportunities/{opportunityId}/applications?cursor=`
-- `POST /internal/applications/{applicationId}/decision`
-  with `{ "decision", "capacity", "decidedBy" }`
+| Direction | Role assumed (in the API's account) | Session name | Caller ARN the API expects |
+|---|---|---|---|
+| Volunteer backend → NGO API | `arn:aws:iam::281780646139:role/vl-ngo-internal-api-caller` (trusts `vl-volunteer-task-role`) | `vl-volunteer-api` | `arn:aws:sts::281780646139:assumed-role/vl-ngo-internal-api-caller/vl-volunteer-api` |
+| NGO backend → Volunteer API | `arn:aws:iam::170813308606:role/vl-volunteer-internal-api-caller` (trusts `vl-ngo-task-role`) | `vl-ngo-api` | `arn:aws:sts::170813308606:assumed-role/vl-volunteer-internal-api-caller/vl-ngo-api` |
 
-**NGO API, called by the Volunteer backend (needed from Malek):**
+**Volunteer API, called by the NGO backend** (implemented in `backend/volunteer/internal.py`):
+
+- `GET /internal/opportunities/{opportunityId}/applications?cursor=` →
+  ```json
+  { "opportunityId": "...", "acceptedCount": 3,
+    "items": [<Application> + fullName, location, skills, availability, score], "nextCursor": null }
+  ```
+  Newest first; `score` is `null` until ranking is integrated. The NGO backend
+  adds `capacity` from its own opportunity record for the browser response.
+- `POST /internal/applications/{applicationId}/decision` with
+  `{ "decision": "accepted" | "rejected", "ngoId", "capacity", "decidedBy" }`
+  - `ngoId` = the owning NGO the NGO backend verified; checked again against the
+    stored application (**added 25 Nov**).
+  - Accept = one transaction: application `pending → accepted` **and** the
+    opportunity's `acceptedCount + 1`, only while `acceptedCount < capacity`.
+  - `200 {application}`; `403` other NGO's application; `404` not found;
+    `409` already decided / all slots filled; `400` bad body.
+
+**NGO API, called by the Volunteer backend:**
 - `GET /internal/opportunities/{opportunityId}` →
   `{ opportunityId, ngoId, title, status, capacity, startAt, endAt, contactEmail }`
-  (`contactEmail` = where "new applicant" and reminder emails go; needs a
-  `contactEmail` field on NGO registration.)
+  (`contactEmail` = where "new applicant" and reminder emails go; `null` for old records.)
+- Not found must be exactly `404 {"detail": "Opportunity not found."}`. Any other
+  404 (missing route, FastAPI default) is treated as a configuration error (503).
 
 ## Open points to agree
 
