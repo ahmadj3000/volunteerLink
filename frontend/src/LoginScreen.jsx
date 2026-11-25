@@ -186,6 +186,7 @@ export default function App() {
           {!needsNewPassword && (
             <button
               type="button"
+              className="secondary"
               onClick={() => {
                 setMessage('')
                 setMode('signup')

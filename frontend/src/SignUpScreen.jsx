@@ -178,13 +178,13 @@ export default function SignUpScreen({
           <button type="submit" disabled={busy}>
             {busy ? 'Please wait…' : 'Verify'}
           </button>
-          <button type="button" onClick={handleResend} disabled={busy}>
+          <button type="button" className="secondary" onClick={handleResend} disabled={busy}>
             Resend code
           </button>
         </form>
       )}
 
-      <button type="button" onClick={() => onBack('')} disabled={busy}>
+      <button type="button" className="secondary" onClick={() => onBack('')} disabled={busy}>
         Back to sign in
       </button>
 
