@@ -103,9 +103,14 @@ def test_ngo_backend_404_means_not_found(setup):
     assert ngo_client.get_opportunity("opp-1") is None
 
 
-def test_api_gateway_404_is_a_config_error_not_not_found(setup):
+@pytest.mark.parametrize("body", [
+    b'{"message":"Not Found"}',   # API Gateway: no such route
+    b'{"detail":"Not Found"}',    # FastAPI default: handler not deployed yet
+    b"",
+])
+def test_other_404s_are_config_errors_not_not_found(setup, body):
     _, http = setup
-    http.status, http.body = 404, b'{"message":"Not Found"}'
+    http.status, http.body = 404, body
     with pytest.raises(ngo_client.OpportunityServiceUnavailable):
         ngo_client.get_opportunity("opp-1")
 

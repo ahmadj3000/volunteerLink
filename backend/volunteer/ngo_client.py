@@ -43,6 +43,7 @@ SESSION_NAME = "vl-volunteer-api"
 TIMEOUT_SECONDS = 5
 REFRESH_EARLY = timedelta(minutes=5)
 MAX_BODY_BYTES = 64 * 1024
+NOT_FOUND_DETAIL = "Opportunity not found."  # agreed with Malek
 
 
 class OpportunityServiceUnavailable(Exception):
@@ -135,12 +136,13 @@ def get_opportunity(opportunity_id: str) -> dict | None:
         data = None
 
     if status == 404:
-        # Malek's backend answers {"detail": ...}. API Gateway's own 404
-        # ({"message": "Not Found"}) means the route is missing: a config
-        # problem, not a missing opportunity, so don't report "not found".
-        if isinstance(data, dict) and "detail" in data:
+        # Only the agreed body means "this opportunity doesn't exist".
+        # API Gateway's {"message": "Not Found"} or FastAPI's default
+        # {"detail": "Not Found"} mean the route is missing: a config problem,
+        # so report unavailable instead of telling the volunteer "not found".
+        if isinstance(data, dict) and data.get("detail") == NOT_FOUND_DETAIL:
             return None
-        raise OpportunityServiceUnavailable("404 from API Gateway (route missing?)")
+        raise OpportunityServiceUnavailable("404 without the agreed body (route missing?)")
     if status != 200:
         # 403 = IAM refused the signed call; 5xx = NGO backend trouble.
         raise OpportunityServiceUnavailable(f"NGO API returned {status}")
