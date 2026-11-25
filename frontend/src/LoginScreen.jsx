@@ -5,6 +5,7 @@ import {
   confirmSignIn,
   fetchAuthSession,
 } from 'aws-amplify/auth'
+import SignUpScreen from './SignUpScreen'
 import './App.css'
 
 export default function App() {
@@ -15,6 +16,8 @@ export default function App() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [needsNewPassword, setNeedsNewPassword] = useState(false)
+  // 'signin' | 'signup' | 'confirm' (unverified user trying to sign in)
+  const [mode, setMode] = useState('signin')
 
   useEffect(() => {
     let active = true
@@ -73,6 +76,8 @@ export default function App() {
         setMessage(
           'Choose a permanent password: at least 10 characters, including uppercase, lowercase, and a number.'
         )
+      } else if (result.nextStep.signInStep === 'CONFIRM_SIGN_UP') {
+        setMode('confirm')
       } else {
         setMessage(
           `Additional sign-in step: ${result.nextStep.signInStep}`
@@ -80,6 +85,10 @@ export default function App() {
       }
     } catch (error) {
       setPassword('')
+      if (error.name === 'UserNotConfirmedException') {
+        setMode('confirm')
+        return
+      }
       setMessage(error.message || 'Sign-in failed.')
     } finally {
       setBusy(false)
@@ -122,6 +131,15 @@ export default function App() {
             {busy ? 'Signing out…' : 'Sign out'}
           </button>
         </section>
+      ) : mode !== 'signin' ? (
+        <SignUpScreen
+          initialEmail={email}
+          startAtConfirm={mode === 'confirm'}
+          onBack={(note) => {
+            setMode('signin')
+            setMessage(note)
+          }}
+        />
       ) : (
         <form onSubmit={handleLogin}>
           <h2>
@@ -164,6 +182,19 @@ export default function App() {
                 ? 'Save password'
                 : 'Sign in'}
           </button>
+
+          {!needsNewPassword && (
+            <button
+              type="button"
+              onClick={() => {
+                setMessage('')
+                setMode('signup')
+              }}
+              disabled={busy}
+            >
+              Create an account
+            </button>
+          )}
         </form>
       )}
 
