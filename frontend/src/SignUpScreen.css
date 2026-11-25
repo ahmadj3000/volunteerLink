@@ -1,0 +1,20 @@
+/* Sign-up only. Scoped under .signup so Malek's App.css is untouched. */
+.signup .account-type { margin-bottom: 22px; }
+.signup .account-type-label { display: block; font-weight: 600; margin-bottom: 8px; }
+.signup .account-type-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.signup .account-type-options button {
+  display: grid; gap: 4px; text-align: left; padding: 14px;
+  background: #fbfcfa; color: #183b32; border: 1px solid #cbd7ce;
+}
+.signup .account-type-options button:hover { background: #f0f4ef; }
+.signup .account-type-options button[aria-pressed="true"] {
+  background: #eaf2eb; border: 2px solid #24664e; padding: 13px;
+}
+.signup .account-type-options small { font-weight: 400; color: #61736b; font-size: 13px; }
+.signup .hint { margin: -10px 0 20px; font-size: 13px; color: #61736b; }
+.signup .link-button {
+  background: none; color: #24664e; margin-top: 14px; padding: 6px;
+  font-weight: 600;
+}
+.signup .link-button:hover { background: none; text-decoration: underline; }
+.signup .secondary { margin-top: 10px; }

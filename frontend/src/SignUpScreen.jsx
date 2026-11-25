@@ -5,6 +5,7 @@ import {
   resendSignUpCode,
   autoSignIn,
 } from 'aws-amplify/auth'
+import './SignUpScreen.css'
 
 // Self sign-up for volunteers and NGOs.
 // The browser only sends custom:accountType ("volunteer" or "ngo").
@@ -95,32 +96,31 @@ export default function SignUpScreen({
   return (
     <>
       {step === 'details' ? (
-        <form onSubmit={handleSignUp}>
+        <form className="signup" onSubmit={handleSignUp}>
           <h2>Create an account</h2>
 
-          <fieldset disabled={busy}>
-            <legend>I am signing up as</legend>
-            <label>
-              <input
-                type="radio"
-                name="accountType"
-                value="volunteer"
-                checked={accountType === 'volunteer'}
-                onChange={() => setAccountType('volunteer')}
-              />
-              Volunteer
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="accountType"
-                value="ngo"
-                checked={accountType === 'ngo'}
-                onChange={() => setAccountType('ngo')}
-              />
-              NGO (needs admin approval before posting)
-            </label>
-          </fieldset>
+          <div className="account-type" role="group" aria-labelledby="account-type-label">
+            <span id="account-type-label" className="account-type-label">
+              I am signing up as
+            </span>
+            <div className="account-type-options">
+              {[
+                ['volunteer', 'Volunteer', 'Find and apply to opportunities'],
+                ['ngo', 'NGO', 'Post opportunities after admin approval'],
+              ].map(([value, title, note]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={accountType === value}
+                  onClick={() => setAccountType(value)}
+                  disabled={busy}
+                >
+                  {title}
+                  <small>{note}</small>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <label>
             Email
@@ -146,7 +146,7 @@ export default function SignUpScreen({
               required
             />
           </label>
-          <p>
+          <p className="hint">
             At least 10 characters, including uppercase, lowercase, and a
             number.
           </p>
@@ -154,9 +154,17 @@ export default function SignUpScreen({
           <button type="submit" disabled={busy}>
             {busy ? 'Please wait…' : 'Create account'}
           </button>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => onBack('')}
+            disabled={busy}
+          >
+            Back to sign in
+          </button>
         </form>
       ) : (
-        <form onSubmit={handleConfirm}>
+        <form className="signup" onSubmit={handleConfirm}>
           <h2>Verify your email</h2>
           <p>Enter the 6-digit code sent to {email.trim()}.</p>
 
@@ -181,12 +189,16 @@ export default function SignUpScreen({
           <button type="button" className="secondary" onClick={handleResend} disabled={busy}>
             Resend code
           </button>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => onBack('')}
+            disabled={busy}
+          >
+            Back to sign in
+          </button>
         </form>
       )}
-
-      <button type="button" className="secondary" onClick={() => onBack('')} disabled={busy}>
-        Back to sign in
-      </button>
 
       {message && <p role="alert">{message}</p>}
     </>
