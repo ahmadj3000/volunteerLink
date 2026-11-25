@@ -2,7 +2,8 @@
 
 Modules (one router each, one shared app/entrypoint, one requirements.txt):
   profiles.py      Ahmad  — GET/PUT /me/profile (migrated from Lambda)
-  applications.py  Ahmad  — apply, my applications, internal decision route (next)
+  applications.py  Ahmad  — POST /applications, GET /me/applications
+  ngo_client.py    Ahmad  — calls the NGO account's internal API (SigV4 in step 3c)
   matching.py      Tarek  — embeddings, cosine ranking, recommendations (next)
 """
 
@@ -10,10 +11,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+import applications
 import profiles
 
 app = FastAPI(title="VolunteerLink Volunteer API")
 app.include_router(profiles.router)
+app.include_router(applications.router)
 
 
 @app.exception_handler(ClientError)
