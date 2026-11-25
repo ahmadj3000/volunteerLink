@@ -180,3 +180,6 @@ def review(
 
 from opportunities import router as opportunities_router
 app.include_router(opportunities_router)
+
+from applications import router as applications_router  # Ahmad: applicant review
+app.include_router(applications_router)
