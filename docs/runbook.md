@@ -10,6 +10,9 @@ Log the date and your name under each section when you build it, so we can rebui
 
 ## Slice 1: Cognito → API → Lambda → DynamoDB ✅ (smoke test passed 19 Nov 2026)
 
+> **Superseded 25 Nov 2026:** the profile API now runs on ECS. See
+> "Volunteer backend on ECS" below. Sections C–D describe the retired Lambda.
+
 Sign in at https://d-90666455e0.awsapps.com/start. Console labels shift a little over time, so if a name below doesn't match exactly, look for the closest one.
 
 **Values for slice 1**
@@ -108,7 +111,7 @@ aws cognito-idp admin-confirm-sign-up --user-pool-id $POOL_ID --username $EMAIL 
 aws cognito-idp admin-get-user --user-pool-id $POOL_ID --username $EMAIL --profile vl-ngo --no-cli-pager --query UserStatus   # want "CONFIRMED"
 
 # 2. token + 401 check
-$TOKEN = aws cognito-idp initiate-auth --client-id $CLIENT_ID --auth-flow USER_PASSWORD_AUTH --auth-parameters USERNAME=$EMAIL,PASSWORD=$PW --query "AuthenticationResult.IdToken" --output text --profile vl-ngo --no-cli-pager
+$TOKEN = aws cognito-idp initiate-auth --client-id $CLIENT_ID --auth-flow USER_PASSWORD_AUTH --auth-parameters USERNAME=$EMAIL,PASSWORD=$PW --query "AuthenticationResult.AccessToken" --output text --profile vl-ngo --no-cli-pager
 curl.exe -s -o NUL -w "no token: %{http_code}`n" "$API/me/profile"   # want 401
 
 # 3. save + read profile
@@ -129,3 +132,140 @@ You should get a 401 without a token, then your profile back from both the PUT a
 **Before the demo:** remove `ALLOW_USER_PASSWORD_AUTH` from the `vl-web` app client.
 
 Built by: Ahmad  Date: 18–19 Nov 2026
+
+---
+
+## Volunteer backend on ECS — Ahmad Jaber — 2026-11-25
+
+Moves the profile API (`GET/PUT /me/profile`) from the `vl-profile` Lambda to a
+FastAPI container on ECS Fargate, behind the **same** API URL. Same pattern as
+the NGO side (API Gateway → VPC link → internal ALB → Fargate).
+
+Account: Volunteer — 170813308606. Region: us-east-1.
+Built via console, except ECR, log group and execution role (CLI).
+
+### Request path
+
+```
+browser ──HTTPS──▶ API Gateway 57bc1lggo1 (JWT authorizer, CORS, throttling)
+        ──▶ VPC link o866vx [vl-volunteer-vpclink-sg]
+        ──HTTP 80──▶ internal ALB vl-volunteer-api-alb [vl-volunteer-alb-sg]
+        ──HTTP 8000──▶ Fargate task [vl-volunteer-ecs-sg]
+        ──▶ DynamoDB vl-volunteers (task role)
+```
+
+The token is checked twice: by the API Gateway JWT authorizer and again in
+FastAPI (`backend/volunteer/auth.py`, access tokens only).
+
+### Resources
+
+**Image**
+- ECR repo `vl-volunteer-api` (tags IMMUTABLE, scan on push)
+- Image `170813308606.dkr.ecr.us-east-1.amazonaws.com/vl-volunteer-api:v1`
+  (index digest `sha256:b1bcfaa2…`, linux/amd64 image `sha256:a8dbb5d3…`, ~73 MB)
+- Built from `backend/volunteer/Dockerfile`:
+  `docker build --platform linux/amd64 -t vl-volunteer-api:dev .`
+  Add `--provenance=false --sbom=false` for future tags so scan-on-push works.
+
+**IAM**
+- `vl-volunteer-execution-role`: trust `ecs-tasks.amazonaws.com`, policy
+  `AmazonECSTaskExecutionRolePolicy` (pull from ECR, write logs).
+- `vl-volunteer-task-role`: trust `ecs-tasks.amazonaws.com`, inline policy
+  `vl-volunteers-profile-access` = `dynamodb:GetItem`, `dynamodb:UpdateItem` on
+  `arn:aws:dynamodb:us-east-1:170813308606:table/vl-volunteers` only.
+
+**Logs**
+- `/ecs/vl-volunteer-api`, retention 14 days.
+
+**Network** (default VPC `vpc-06bde51126cd27e68`, public subnets via IGW)
+- Subnets: us-east-1a `subnet-0b82a17a7d1c55f19`, us-east-1b `subnet-0cfa9960130c445b3`
+- `vl-volunteer-vpclink-sg` `sg-00720119e7304dcae`: no inbound
+- `vl-volunteer-alb-sg` `sg-04addbdb3bf0b9107`: TCP 80 from vpclink SG only
+- `vl-volunteer-ecs-sg` `sg-0c9723a3738487ebd`: TCP 8000 from ALB SG only
+- Tasks get a public IP for **outbound only** (ECR, Cognito keys, DynamoDB,
+  logs). No inbound rule allows the internet. No NAT gateway, no endpoints.
+
+**Load balancer**
+- ALB `vl-volunteer-api-alb`, **internal**, IPv4, both subnets, listener HTTP 80
+  → `vl-volunteer-api-tg`. DNS (private only):
+  `internal-vl-volunteer-api-alb-740373852.us-east-1.elb.amazonaws.com`
+- Target group `vl-volunteer-api-tg`: IP targets, HTTP 8000, health check
+  `GET /health` → 200 (default thresholds: 5 × 30 s to healthy).
+
+**ECS**
+- Cluster `vl-volunteer-cluster` (Fargate only, Container Insights off)
+- Task definition `vl-volunteer-api:1`: 0.25 vCPU / 0.5 GB, Linux/x86_64,
+  awsvpc, container `vl-volunteer-api` port 8000, env
+  `COGNITO_USER_POOL_ID=us-east-1_is9qkiZoh`,
+  `COGNITO_CLIENT_ID=6blnjutulha6k2gr0d1lf5fe9f`, awslogs → `/ecs/vl-volunteer-api`
+  (prefix `ecs`). `VOLUNTEERS_TABLE` defaults to `vl-volunteers`.
+- Service `vl-volunteer-api-service`: 1 task, both subnets, `vl-volunteer-ecs-sg`,
+  public IP on, attached to `vl-volunteer-api-tg`, health check grace 60 s,
+  circuit breaker with rollback.
+
+**API Gateway** (`57bc1lggo1`, unchanged URL, JWT authorizer, CORS, throttling)
+- VPC link (V2) `vl-volunteer-vpc-link` `o866vx`: both subnets, vpclink SG
+- Integration `qlzy375`: private resource → ALB listener HTTP 80 via `o866vx`
+- `GET /me/profile` and `PUT /me/profile` → `qlzy375`
+- Old Lambda integration (`vl-profile`) deleted from the API. The `vl-profile`
+  function, its role and log group are kept until after the demo as a rollback.
+
+### Verification (25 Nov 2026)
+- Local: `docker run -p 8001:8000 …` → `/health` 200, `/me/profile` 401.
+- ECS: deployment COMPLETED, 1 running task, target `healthy`.
+- Through the public URL with an **access token**:
+  - no token → 401 (API Gateway)
+  - `GET /me/profile` → existing 19 Nov profile from `vl-volunteers`
+  - `PUT /me/profile` → `location` updated, `updatedAt` new, `createdAt`
+    unchanged (19 Nov), `volunteerId` = Cognito `sub`
+- `aws logs tail /ecs/vl-volunteer-api` shows `"GET /me/profile" 200` and
+  `"PUT /me/profile" 200` from `172.31.x.x` (the ALB), so the container served them.
+
+Repeat with `scripts/smoke-test.sh` or the PowerShell steps in slice 1 F
+(they now request the **AccessToken**).
+
+### Issues hit (and fixes)
+- Docker Desktop crashing on Windows: C: drive full. Reinstalled with
+  `--installation-dir` and `--wsl-default-data-root` on D:.
+- `docker login` → "The stub received bad data": the ECR token is too long for
+  Windows Credential Manager. Removed `credsStore` and renamed
+  `docker-credential-wincred.exe` so the 12-hour token is stored in
+  `~/.docker/config.json` instead.
+- Execution role first created in the NGO account by mistake: deleted there,
+  recreated in Volunteer with `--profile vl-vol`. Always check the account ID.
+- Task role trusted `ecs.amazonaws.com` (wrong use case) so it didn't appear in
+  the task definition: trust changed to `ecs-tasks.amazonaws.com`.
+- Service first created with the default SG/all subnets/no load balancer, then
+  recreated; later updated from the default SG to `vl-volunteer-ecs-sg`
+  (rolling deployment, no downtime).
+- ECR basic scan of v1: 9 HIGH / 5 MEDIUM, all in the base image's Debian
+  `openssl`. Accepted for the demo (private behind an internal ALB, non-root);
+  for production, add `apt-get upgrade` to the image and rescan.
+
+### Cost (approx., us-east-1 list prices — check Billing)
+| Item | Hourly | Per day | 30 days |
+|---|---|---|---|
+| ALB (fixed, plus tiny LCU usage) | ~$0.0225 | ~$0.54 | ~$16.20 |
+| Fargate 0.25 vCPU + 0.5 GB | ~$0.0123 | ~$0.30 | ~$8.90 |
+| Public IPv4 on the task | $0.005 | $0.12 | $3.60 |
+| VPC link (HTTP API) | none | — | — |
+| ECR storage (~73 MB), logs, DynamoDB, API requests | — | cents | < $0.50 |
+| **Total, Volunteer side** | | **~$0.96** | **~$29** |
+
+The NGO side has the same shape, so roughly double for the whole project.
+That does **not** fit the original $5/month target if left running. Budget
+alerts only warn; they don't stop spending.
+
+### Stop / cleanup
+- **Pause compute** (keeps everything): ECS service → Update → desired tasks **0**.
+  Back to **1** to resume (~3 min to healthy). The ALB keeps billing.
+- **After the presentations**, delete in this order:
+  1. ECS service (scale to 0, then delete) and cluster; deregister task definitions
+  2. API routes' integration `qlzy375` (or the whole API if retired), then VPC link `o866vx`
+  3. ALB `vl-volunteer-api-alb`, then target group `vl-volunteer-api-tg`
+  4. Security groups (ecs, alb, vpclink)
+  5. ECR repo `vl-volunteer-api` (with images), log group `/ecs/vl-volunteer-api`
+  6. IAM roles `vl-volunteer-task-role`, `vl-volunteer-execution-role`
+  7. Retired Lambda: `vl-profile`, role `vl-profile-fn`, log group `/aws/lambda/vl-profile`
+- Keep `vl-volunteers` until the team agrees the data is no longer needed.
+
