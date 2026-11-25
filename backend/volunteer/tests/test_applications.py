@@ -174,8 +174,8 @@ def test_ngo_api_down_503(env, as_user, monkeypatch):
     assert env["apps"].items == {}
 
 
-def test_real_client_not_configured_yet_503(env, as_user, monkeypatch):
-    # Until step 3c, the real client refuses rather than guessing.
+def test_real_client_unconfigured_503(env, as_user, monkeypatch):
+    # Without NGO_INTERNAL_API_URL / NGO_CALLER_ROLE_ARN the real client refuses.
     monkeypatch.undo()
     monkeypatch.setattr(applications, "volunteers_table", lambda: env["vols"])
     monkeypatch.setattr(applications, "applications_table", lambda: env["apps"])

@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 import ngo_client
 from auth import current_user
@@ -113,7 +114,9 @@ async def apply(request: Request, user: dict = Depends(require_volunteer)):
 
     # 2. Ask the NGO account about the opportunity.
     try:
-        opp = ngo_client.get_opportunity(req["opportunityId"])
+        # Blocking network call (up to 5 s): run it in a worker thread so the
+        # server keeps serving other requests meanwhile.
+        opp = await run_in_threadpool(ngo_client.get_opportunity, req["opportunityId"])
     except ngo_client.OpportunityServiceUnavailable as error:
         print(f"NGO API unavailable: {error}", flush=True)
         raise HTTPException(503, "Opportunity service unavailable.") from None
