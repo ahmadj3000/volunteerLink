@@ -840,3 +840,19 @@ Waiting (48 h, until the event) is free in Standard workflows.
 "My profile" in the volunteer nav. Create/edit via `GET`/`PUT /me/profile` (already live).
 Limits mirror `profiles.py`; the backend still validates. Apply errors about a missing profile
 link to the page. Lint + build pass; browser test pending (local `npm run dev`).
+
+
+## Hosted frontend deployment and verification — Malek — 2026-11-27
+
+- Deployed the production frontend to S3 and CloudFront:
+  https://dkd4jyaiba9x9.cloudfront.net
+- Built with the deployed NGO and Volunteer API URLs.
+- Added the CloudFront origin to the Volunteer API Gateway CORS configuration.
+- Verified hosted volunteer profile and application history.
+- Verified hosted NGO applicant review and acceptance.
+- Verified acceptance and rejection emails during integration testing.
+- Verified capacity protection with a capacity-1 opportunity:
+  two volunteers applied, one was accepted, and accepting the
+  second from an outdated browser tab was refused.
+- Confirmed the full opportunity displays 1 / 1 and disables Accept.
+- Reminder, expiry, and event-reminder verification remains with Ahmad.
