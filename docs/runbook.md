@@ -269,3 +269,139 @@ alerts only warn; they don't stop spending.
   7. Retired Lambda: `vl-profile`, role `vl-profile-fn`, log group `/aws/lambda/vl-profile`
 - Keep `vl-volunteers` until the team agrees the data is no longer needed.
 
+
+---
+
+## Applications API + cross-account calls — Ahmad Jaber — 2026-11-25
+
+(Summary; contract in `docs/api-applications.md`.)
+
+Account: Volunteer — 170813308606 (+ roles in NGO — 281780646139). Region: us-east-1.
+
+- **Routes on API `57bc1lggo1`**
+  - Browser, Cognito JWT (`cognito-jwt`), integration `qlzy375` (strips `x-vl-caller-arn`):
+    `POST /applications`, `GET /me/applications`
+  - Internal, **IAM auth only**, integration `x4f0r37` (overwrites `x-vl-caller-arn = $context.identity.userArn`):
+    `GET /internal/opportunities/{opportunityId}/applications`,
+    `POST /internal/applications/{applicationId}/decision`
+- **Tables (Volunteer):** `vl-applications` (PK `applicationId` = `<opportunityId>_<volunteerId>`,
+  GSIs `byVolunteer`, `byOpportunity`, stream NEW_AND_OLD_IMAGES), `vl-opportunity-slots` (`acceptedCount`).
+- **Cross-account roles (STS AssumeRole + SigV4, no stored keys):**
+  - NGO `vl-ngo-internal-api-caller` ← trusted by `vl-volunteer-task-role`, session `vl-volunteer-api`.
+    Inline policies: `invoke-internal-get-opportunity`, and (26 Nov) `vl-volunteer-email-lookup`
+    = `cognito-idp:ListUsers` on pool `us-east-1_is9qkiZoh` only.
+  - Volunteer `vl-volunteer-internal-api-caller` ← trusted by `vl-ngo-task-role`, session `vl-ngo-api`.
+- **NGO API `ozb9ner0t1`:** `GET /internal/opportunities/{opportunityId}` and `/internal/{proxy+}` are IAM-only,
+  header stamped the same way; browser integration strips it.
+- **Code:** `backend/volunteer/applications.py`, `ngo_client.py`, `internal.py`; NGO side
+  `backend/ngo/applications.py`, `volunteer_client.py`. Accept = one DynamoDB transaction
+  (status pending→accepted + `acceptedCount < capacity`).
+- **Verified 25 Nov:** unsigned internal calls → 403; no token → 401; SSO admin can't assume either caller role;
+  admin-signed call refused by the caller-ARN check.
+
+---
+
+## Application workflow (step 4) — Ahmad Jaber — 2026-11-26
+
+Event-driven workflow for every application: notify the NGO, wait for the decision
+(48 h, one reminder, then expire), notify the volunteer, remind them the day before
+the event. Built from CloudShell with `scripts/step4-setup.sh` (re-runnable);
+definitions and IAM policies in `infra/workflow/`.
+
+Account: Volunteer — 170813308606. Region: us-east-1.
+
+### Flow
+
+```
+POST /applications ──▶ vl-applications (PutItem, the ONLY write)
+   stream ──▶ Pipe vl-applications-pipe  (filters: INSERT status=pending
+             │                            | MODIFY pending→accepted/rejected)
+             ▼
+        bus vl-applications-bus
+          ├─ rule vl-application-created ──▶ Standard SFN vl-application-workflow
+          └─ rule vl-application-decided ──▶ Express SFN vl-decision-relay ─ SendTaskSuccess(token)
+
+vl-application-workflow:
+ Config(48h) → Claim (set workflowExecution IF not set; else Duplicate → stop)
+ → NotifyNgoAndWait (SQS .waitForTaskToken, timeout 48h)
+      email worker parks the token on the row (IF status=pending), emails the NGO
+   ├ decision (relay returns token) → NotifyVolunteer
+   └ timeout → CheckStatus: decided? → NotifyVolunteer
+                            pending  → RemindNgoAndWait (NEW token, 48h)
+                                          └ timeout → CheckStatus → Expire (status=expired IF pending)
+                                                                   → email volunteer "expired"
+ accepted → reminderAt = startAt − 24h → Wait → event reminder email
+```
+
+Email jobs: `vl-email-queue` → `vl-email-worker` (Lambda) → SES. After 3 failed
+receives a job moves to `vl-email-dlq`. Pipe/rule delivery failures go to `vl-events-dlq`.
+
+### Design decisions (Q&A)
+- **No dual write:** the backend only writes the row; events come from the table stream.
+  The decision route is unchanged: its status update *is* the decision event.
+- **Duplicates are harmless:** Pipes/EventBridge can't set an execution name, so identity
+  is the `applicationId` via the conditional `Claim` write. A 2nd execution ends in `Duplicate`.
+- **Expired tokens are never reused:** a timeout goes to `CheckStatus` (reads the real status);
+  a reminder uses a fresh token which the worker overwrites on the row. A stale token in the
+  relay → `TaskTimedOut` → ignored.
+- **Races:** decided before the token is parked → the worker's conditional write fails and the
+  worker returns the token itself. Decided at the last second before expiry → `Expire` condition
+  fails → workflow continues with the stored decision.
+- **Tokens stay server-side:** on the row only; API responses use a field whitelist.
+- **Only Lambda = email worker** (small add-on). The relay is a 1-step Express workflow (SDK call).
+- **Volunteer email:** looked up in Cognito by the token's `sub` at apply time (cross-account,
+  `ListUsers` only), stored as `volunteerEmail`. Never from the browser. Lookup failure doesn't block applying.
+
+### Resources
+
+| Resource | Name / details |
+|---|---|
+| SQS | `vl-email-queue` (visibility 60 s, retention 4 d, SSE-SQS, redrive → `vl-email-dlq` after 3), `vl-email-dlq` (14 d), `vl-events-dlq` (14 d, policy: only rules on `vl-applications-bus`) |
+| SES (sandbox) | identities `ahmadj3100+vl-noreply@gmail.com` (sender), `ahmadj3100+ngo@gmail.com`, `ahmadj3100@gmail.com`, `malektakieddine11@gmail.com` — all Verified |
+| Lambda | `vl-email-worker`, Python 3.13 arm64, handler `handler.handler`, 10 s, env `APPLICATIONS_TABLE`, `SENDER_EMAIL`; SQS trigger batch 5, ReportBatchItemFailures, max concurrency 2; role `vl-email-worker-role-g5tnmi0k` (+ `AWSLambdaSQSQueueExecutionRole`, inline `vl-email-worker-access`) |
+| EventBridge | bus `vl-applications-bus`; rules `vl-application-created` (INSERT → workflow, input transformer `{applicationId, opportunityStartAt}`), `vl-application-decided` (MODIFY → relay, input = NewImage); retries 10 / 1 h, DLQ `vl-events-dlq`; role `vl-applications-events-role` (StartExecution on both) |
+| Pipe | `vl-applications-pipe`: `vl-applications` stream (LATEST, batch 1, 3 retries, DLQ `vl-events-dlq`) → bus; role `vl-applications-pipe-role` |
+| Step Functions | `vl-application-workflow` (STANDARD, role `vl-application-workflow-role`: GetItem/UpdateItem on `vl-applications`, SendMessage on `vl-email-queue`); `vl-decision-relay` (EXPRESS, role `vl-decision-relay-role`: SendTaskSuccess). Logs ERROR → `/aws/vendedlogs/states/<name>` (14 d) |
+| Logs | `/aws/lambda/vl-email-worker` 14 d |
+| Volunteer backend | image `vl-volunteer-api:v2-email`, task def `vl-volunteer-api:3` (rev 2 = rollback), built + deployed from CloudShell |
+
+### Verification (26 Nov 2026, `scripts/step4-e2e-test.sh`)
+- `start`: pending row inserted → pipe RUNNING → execution started → `workflowExecution` set,
+  token parked; worker log `sent ngo_new_applicant`; NGO email received.
+- `dup`: second execution for the same application → `Duplicate` → succeeded, nothing sent.
+- `decide accepted`: relay returned the token → `NotifyVolunteer` → `WasAccepted` →
+  `ComputeReminderTime` → `WaitUntilReminder`; worker log `sent decision`; email received.
+- `vl-email-dlq` = 0. Test execution stopped, test row deleted.
+- Volunteer backend v2-email: deployment stable, `/me/profile` without token → 401.
+- **Not yet shown:** the timeout path (set `Config` to 120 s for the demo), full UI run.
+
+### Demo: show the reminder/expiry path
+Step Functions → `vl-application-workflow` → Edit → state `Config` → `decisionTimeoutSeconds` 120 → Save.
+Apply, don't decide: ~2 min reminder email, ~4 min `expired` + volunteer email.
+**Set it back to 172800 afterwards.**
+
+### Cost (approx., list prices)
+Nothing here bills while idle. Per application roughly 15 Standard state transitions
+($0.025/1,000), a few events/pipe requests/SQS messages ($0.40–1/million), 2–4 Lambda
+invocations and SES emails ($0.10/1,000). The whole demo costs well under $0.10.
+Waiting (48 h, until the event) is free in Standard workflows.
+
+### Stop / cleanup (after the presentations)
+1. Stop running executions of `vl-application-workflow`.
+2. Pipe `vl-applications-pipe` → Stop, then delete.
+3. Rules `vl-application-created`/`-decided` (remove targets first), bus `vl-applications-bus`.
+4. State machines `vl-application-workflow`, `vl-decision-relay`; their log groups.
+5. Lambda `vl-email-worker` (trigger first), its role and log group.
+6. Queues `vl-email-queue`, `vl-email-dlq`, `vl-events-dlq`.
+7. IAM roles `vl-applications-pipe-role`, `vl-application-workflow-role`, `vl-decision-relay-role`,
+   `vl-applications-events-role`; NGO inline policy `vl-volunteer-email-lookup`.
+8. SES identities (optional, free).
+
+---
+
+## Volunteer profile page — Ahmad Jaber — 2026-11-26
+
+`frontend/src/pages/ahmad/Profile.jsx` (branch `malek-ahmad-integration`), route `/#/profile`,
+"My profile" in the volunteer nav. Create/edit via `GET`/`PUT /me/profile` (already live).
+Limits mirror `profiles.py`; the backend still validates. Apply errors about a missing profile
+link to the page. Lint + build pass; browser test pending (local `npm run dev`).
