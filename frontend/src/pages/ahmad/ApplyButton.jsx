@@ -68,7 +68,14 @@ export default function ApplyButton({ opportunity }) {
       </label>
 
       <p>{message.length}/500 characters</p>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert">
+          {error}
+          {error.toLowerCase().includes('profile') && (
+            <> <Link to="/profile">Create your profile</Link></>
+          )}
+        </p>
+      )}
 
       <button type="submit" disabled={busy}>
         {busy ? 'Submitting…' : 'Submit application'}

@@ -1,7 +1,7 @@
 # Frontend page ownership
 
 - malek/: opportunities, NGO dashboard, admin approvals.
-- ahmad/: applications, applicants and decisions.
+- ahmad/: profile, applications, applicants and decisions.
 - tarek/: recommendations.
 
 App.jsx owns navigation and route registration.

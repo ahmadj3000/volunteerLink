@@ -14,6 +14,7 @@ import NgoDashboard from './pages/malek/NgoDashboard'
 import AdminDashboard from './pages/malek/AdminDashboard'
 import Applications from './pages/ahmad/Applications'
 import Applicants from './pages/ahmad/Applicants'
+import Profile from './pages/ahmad/Profile'
 import Recommendations from './pages/tarek/Recommendations'
 import './App.css'
 
@@ -119,6 +120,7 @@ export default function App() {
               <>
                 <NavLink to="/recommendations">Recommended for you</NavLink>
                 <NavLink to="/applications">My applications</NavLink>
+                <NavLink to="/profile">My profile</NavLink>
               </>
             )}
             {isNgo && (
@@ -170,6 +172,9 @@ export default function App() {
             } />
             <Route path="/applications" element={
               restricted(isVolunteer, <Applications />)
+            } />
+            <Route path="/profile" element={
+              restricted(isVolunteer, <Profile />)
             } />
             <Route path="/ngo" element={
               restricted(isNgo, <NgoDashboard />)
