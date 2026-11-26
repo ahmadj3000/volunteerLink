@@ -180,17 +180,20 @@ async def decide(application_id: str, request: Request):
     now = apps.now_iso()
     app_update = {
         "TableName": apps.applications_table().name,
-        "Key": {"applicationId": {"S": application_id}},
+        "Key": {"applicationId": application_id},
         "UpdateExpression": "SET #s = :new, decidedAt = :now, decidedBy = :by",
         # only a pending application of THIS NGO can be decided, exactly once
         "ConditionExpression": "attribute_exists(applicationId) AND #s = :pending AND ngoId = :ngo",
         "ExpressionAttributeNames": {"#s": "status"},
         "ExpressionAttributeValues": {
-            ":new": {"S": body["decision"]}, ":now": {"S": now},
-            ":by": {"S": body["decidedBy"]}, ":pending": {"S": "pending"},
-            ":ngo": {"S": body["ngoId"]},
+            ":new": body["decision"], ":now": now, ":by": body["decidedBy"],
+            ":pending": "pending", ":ngo": body["ngoId"],
         },
     }
+    # The boto3 *resource's* client serializes plain Python values itself, so
+    # Keys and ExpressionAttributeValues below are plain values ("x", 3), NOT
+    # DynamoDB JSON ({"S": "x"}). Passing {"N": "3"} here is sent as a map and
+    # DynamoDB rejects the expression (ValidationException -> 503).
     client = apps.applications_table().meta.client
 
     if body["decision"] == "rejected":
@@ -204,10 +207,10 @@ async def decide(application_id: str, request: Request):
     else:
         slot_update = {
             "TableName": slots_table().name,
-            "Key": {"opportunityId": {"S": opportunity_id}},
+            "Key": {"opportunityId": opportunity_id},
             "UpdateExpression": "ADD acceptedCount :one",
             "ConditionExpression": "attribute_not_exists(acceptedCount) OR acceptedCount < :cap",
-            "ExpressionAttributeValues": {":one": {"N": "1"}, ":cap": {"N": str(body["capacity"])}},
+            "ExpressionAttributeValues": {":one": 1, ":cap": body["capacity"]},
         }
         try:
             client.transact_write_items(TransactItems=[{"Update": app_update}, {"Update": slot_update}])
