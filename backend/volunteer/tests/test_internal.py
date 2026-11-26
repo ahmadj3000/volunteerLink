@@ -54,7 +54,11 @@ class FakeTable:
 
 
 class FakeDB:
-    """Just enough of the low-level client for internal.py's two write shapes."""
+    """Just enough of the boto3 *resource* client (meta.client) for internal.py.
+
+    That client takes plain Python values and serializes them itself, so a
+    DynamoDB-JSON value like {"N": "3"} would reach DynamoDB as a map. The fake
+    rejects that shape the way DynamoDB does (ValidationException)."""
 
     def __init__(self):
         self.apps = FakeTable("vl-applications", "applicationId", self)
@@ -76,15 +80,19 @@ class FakeDB:
         for t in TransactItems:
             u = t["Update"]
             v = u.get("ExpressionAttributeValues", {})
+            if any(isinstance(x, dict) for x in [*v.values(), *u["Key"].values()]):
+                raise ClientError({"Error": {"Code": "ValidationException",
+                                             "Message": "Incorrect operand type ... operand type: M"}},
+                                  "TransactWriteItems")
             if u["TableName"] == "vl-applications":
-                key = u["Key"]["applicationId"]["S"]
+                key = u["Key"]["applicationId"]
                 item = self.apps.items.get(key)
-                ok = item is not None and item["status"] == v[":pending"]["S"] and item["ngoId"] == v[":ngo"]["S"]
+                ok = item is not None and item["status"] == v[":pending"] and item["ngoId"] == v[":ngo"]
                 staged.append(("app", key, v))
             else:
-                key = u["Key"]["opportunityId"]["S"]
+                key = u["Key"]["opportunityId"]
                 count = self.slots.items.get(key, {}).get("acceptedCount")
-                ok = count is None or count < int(v[":cap"]["N"])
+                ok = count is None or count < v[":cap"]
                 staged.append(("slot", key, v))
             reasons.append({"Code": "None" if ok else "ConditionalCheckFailed"})
         if any(r["Code"] != "None" for r in reasons):
@@ -92,10 +100,10 @@ class FakeDB:
                                "CancellationReasons": reasons}, "TransactWriteItems")
         for kind, key, v in staged:      # all conditions passed: apply everything
             if kind == "app":
-                self.apps.items[key].update(status=v[":new"]["S"], decidedAt=v[":now"]["S"], decidedBy=v[":by"]["S"])
+                self.apps.items[key].update(status=v[":new"], decidedAt=v[":now"], decidedBy=v[":by"])
             else:
                 slot = self.slots.items.setdefault(key, {"opportunityId": key})
-                slot["acceptedCount"] = slot.get("acceptedCount", 0) + 1
+                slot["acceptedCount"] = slot.get("acceptedCount", 0) + v[":one"]
 
 
 @pytest.fixture
