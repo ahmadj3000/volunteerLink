@@ -167,3 +167,59 @@ def test_real_send_maps_connection_failure(monkeypatch):
     # The real _send (not the fake) turns network failures into Unavailable.
     with pytest.raises(ngo_client.OpportunityServiceUnavailable):
         ngo_client._send("https://127.0.0.1:9/nothing-listens-here", {})
+
+
+
+# --- volunteer email lookup ---
+
+class FakeCognito:
+    def __init__(self, users=None, fail=False):
+        self.users = users if users is not None else []
+        self.fail = fail
+        self.calls = []
+
+    def list_users(self, **kw):
+        self.calls.append(kw)
+        if self.fail:
+            raise ClientError({"Error": {"Code": "AccessDeniedException"}}, "ListUsers")
+        return {"Users": self.users}
+
+
+def user(email="v@example.org", verified="true"):
+    return {"Attributes": [{"Name": "email", "Value": email}, {"Name": "email_verified", "Value": verified}]}
+
+
+@pytest.fixture
+def cognito_env(monkeypatch):
+    monkeypatch.setenv("NGO_CALLER_ROLE_ARN", ROLE)
+    monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_pool")
+    monkeypatch.setattr(ngo_client, "_sts_client", lambda: FakeSTS())
+    ngo_client._cached.update(credentials=None, expires=None)
+    def install(fake):
+        monkeypatch.setattr(ngo_client, "_cognito_client", lambda creds: fake)
+        return fake
+    return install
+
+
+def test_email_found(cognito_env):
+    fake = cognito_env(FakeCognito([user()]))
+    assert ngo_client.get_volunteer_email("sub-1") == "v@example.org"
+    assert fake.calls[0]["Filter"] == 'sub = "sub-1"'
+    assert fake.calls[0]["UserPoolId"] == "us-east-1_pool"
+
+
+@pytest.mark.parametrize("users", [[], [user(verified="false")]])
+def test_no_usable_email(cognito_env, users):
+    cognito_env(FakeCognito(users))
+    assert ngo_client.get_volunteer_email("sub-1") is None
+
+
+def test_lookup_failure_returns_none(cognito_env):
+    cognito_env(FakeCognito(fail=True))
+    assert ngo_client.get_volunteer_email("sub-1") is None
+
+
+def test_quote_in_sub_is_refused(cognito_env):
+    fake = cognito_env(FakeCognito([user()]))
+    assert ngo_client.get_volunteer_email('x" or 1') is None
+    assert fake.calls == []

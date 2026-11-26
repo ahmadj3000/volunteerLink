@@ -80,6 +80,7 @@ def env(monkeypatch):
     monkeypatch.setattr(applications, "volunteers_table", lambda: vols)
     monkeypatch.setattr(applications, "applications_table", lambda: apps)
     monkeypatch.setattr(ngo_client, "get_opportunity", lambda oid: opps.get(oid))
+    monkeypatch.setattr(ngo_client, "get_volunteer_email", lambda sub: f"{sub}@example.org")
     vols.items["vol-1"] = {"volunteerId": "vol-1", "fullName": "Sara"}
     return {"vols": vols, "apps": apps, "opps": opps}
 
@@ -110,6 +111,15 @@ def test_apply_creates_pending_application(env, as_user):
     assert a["message"] == "I have first aid"
     assert "ngoContactEmail" not in a                 # internal only
     assert env["apps"].items["opp-1_vol-1"]["ngoContactEmail"] == "ngo@example.org"
+    assert "volunteerEmail" not in a                  # internal only
+    assert env["apps"].items["opp-1_vol-1"]["volunteerEmail"] == "vol-1@example.org"
+
+
+def test_apply_without_email_still_works(env, as_user, monkeypatch):
+    monkeypatch.setattr(ngo_client, "get_volunteer_email", lambda sub: None)
+    as_user()
+    assert apply().status_code == 201
+    assert "volunteerEmail" not in env["apps"].items["opp-1_vol-1"]
 
 
 def test_apply_twice_is_409(env, as_user):

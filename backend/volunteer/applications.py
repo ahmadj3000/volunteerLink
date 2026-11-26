@@ -12,6 +12,8 @@ Key ideas
 - Opportunity facts (owner ngoId, title, start, NGO contact email) come from
   the NGO account's internal API, never from the browser, and are copied onto
   the application so later reads don't need to call the NGO account.
+- The volunteer's verified email comes from Cognito (looked up by the token's
+  sub), never from the browser. It is stored for the workflow's emails only.
 - Saving the row is the only write. The table's stream turns the new row into
   the "application created" event (step 4), so there is no second PutEvents
   call that could fail on its own.
@@ -66,7 +68,8 @@ def require_volunteer(user: dict = Depends(current_user)):
     return user
 
 
-# What the browser sees. Internal fields (ngoContactEmail) stay server-side.
+# What the browser sees. Internal fields (ngoContactEmail, volunteerEmail,
+# taskToken, workflowExecution) stay server-side.
 PUBLIC_FIELDS = (
     "applicationId", "opportunityId", "volunteerId", "ngoId",
     "opportunityTitle", "opportunityStartAt", "message",
@@ -133,7 +136,13 @@ async def apply(request: Request, user: dict = Depends(require_volunteer)):
     if started:
         raise HTTPException(409, "This opportunity has already started.")
 
-    # 3. Save once. The condition makes a second apply fail instead of overwrite.
+    # 3. The volunteer's email for the decision emails. Optional: if the lookup
+    #    fails we still accept the application and the email worker skips it.
+    volunteer_email = await run_in_threadpool(ngo_client.get_volunteer_email, volunteer_id)
+    if not volunteer_email:
+        print(f"No volunteer email for {volunteer_id}; decision emails will be skipped", flush=True)
+
+    # 4. Save once. The condition makes a second apply fail instead of overwrite.
     item = {
         "applicationId": f"{req['opportunityId']}_{volunteer_id}",
         "opportunityId": req["opportunityId"],
@@ -148,6 +157,8 @@ async def apply(request: Request, user: dict = Depends(require_volunteer)):
         item["message"] = req["message"]
     if opp.get("contactEmail"):
         item["ngoContactEmail"] = opp["contactEmail"]  # for the workflow's NGO email
+    if volunteer_email:
+        item["volunteerEmail"] = volunteer_email  # for the workflow's volunteer emails
 
     try:
         applications_table().put_item(

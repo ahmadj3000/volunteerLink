@@ -20,6 +20,11 @@ Config (ECS task definition environment):
     NGO_CALLER_ROLE_ARN    arn:aws:iam::281780646139:role/vl-ngo-internal-api-caller
 If either is missing, every call raises OpportunityServiceUnavailable (-> 503).
 
+The same borrowed role is also used for one Cognito read: the shared user pool
+lives in the NGO account, so get_volunteer_email() looks up the applicant's
+verified email there (cognito-idp:ListUsers on that one pool) for the
+workflow's decision emails.
+
 The session name is fixed, so the NGO side sees a predictable caller:
     arn:aws:sts::281780646139:assumed-role/vl-ngo-internal-api-caller/vl-volunteer-api
 """
@@ -149,3 +154,41 @@ def get_opportunity(opportunity_id: str) -> dict | None:
     if not _valid(data, opportunity_id):
         raise OpportunityServiceUnavailable("NGO API returned an unexpected body")
     return data
+
+
+# --- Cognito: the applicant's email (pool lives in the NGO account) ---
+
+def _cognito_client(credentials: Credentials):
+    """Replaced by a fake in tests."""
+    return boto3.client(
+        "cognito-idp", region_name=REGION,
+        aws_access_key_id=credentials.access_key,
+        aws_secret_access_key=credentials.secret_key,
+        aws_session_token=credentials.token,
+    )
+
+
+def get_volunteer_email(user_sub: str) -> str | None:
+    """The verified email of the Cognito user with this sub, or None.
+
+    Never raises: a missing email only means the volunteer gets no decision
+    emails, which must not block applying. Failures are logged.
+    """
+    role_arn = os.environ.get("NGO_CALLER_ROLE_ARN", "")
+    pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
+    if not role_arn or not pool_id or '"' in user_sub:
+        return None
+    try:
+        users = _cognito_client(_credentials(role_arn)).list_users(
+            UserPoolId=pool_id, Filter=f'sub = "{user_sub}"', Limit=1,
+            AttributesToGet=["email", "email_verified"],
+        ).get("Users", [])
+    except (OpportunityServiceUnavailable, ClientError, BotoCoreError) as error:
+        print(f"Volunteer email lookup failed: {type(error).__name__}", flush=True)
+        return None
+    if not users:
+        return None
+    attrs = {a["Name"]: a["Value"] for a in users[0].get("Attributes", [])}
+    if attrs.get("email_verified") != "true":
+        return None
+    return attrs.get("email")
