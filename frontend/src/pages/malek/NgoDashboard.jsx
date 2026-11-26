@@ -8,20 +8,36 @@ export default function NgoDashboard() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', description: '', location: '' })
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    location: '',
+    contactEmail: '',
+  })
 
   useEffect(() => {
     let active = true
+
     ngoApi('/ngo/registration')
-      .then((data) => { if (active) setNgo(data.ngo) })
-      .catch((error) => { if (active) setError(error.message) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
+      .then((data) => {
+        if (active) setNgo(data.ngo)
+      })
+      .catch((error) => {
+        if (active) setError(error.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [])
 
   async function refresh() {
     setBusy(true)
     setError('')
+
     try {
       const data = await ngoApi('/ngo/registration')
       setNgo(data.ngo)
@@ -36,10 +52,14 @@ export default function NgoDashboard() {
     event.preventDefault()
     setBusy(true)
     setError('')
+
     try {
       const data = await ngoApi('/ngo/registration', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          contactEmail: form.contactEmail.trim(),
+        }),
       })
       setNgo(data.ngo)
     } catch (error) {
@@ -50,54 +70,115 @@ export default function NgoDashboard() {
   }
 
   function field(event) {
-    setForm({ ...form, [event.target.name]: event.target.value })
+    const { name, value } = event.target
+    setForm((previous) => ({ ...previous, [name]: value }))
   }
 
   return (
     <section className="panel">
       <span className="eyebrow">NGO WORKSPACE</span>
       <h2>Your organization</h2>
-      {loading ? <p>Loading registration…</p> : ngo ? (
+
+      {loading ? (
+        <p>Loading registration…</p>
+      ) : ngo ? (
         <div>
           <h3>{ngo.name}</h3>
           <p>{ngo.description}</p>
           <p>Location: {ngo.location}</p>
+          {ngo.contactEmail && <p>Contact email: {ngo.contactEmail}</p>}
           <p><strong>Approval status: {ngo.status}</strong></p>
-          {ngo.status === 'pending' && <p>An administrator will review your registration.</p>}
+
+          {ngo.status === 'pending' && (
+            <p>An administrator will review your registration.</p>
+          )}
+
           {ngo.status === 'approved' && (
             <>
               <PostOpportunity />
               <OwnOpportunities />
             </>
           )}
-          {ngo.status === 'rejected' && <p>Your registration was rejected. Contact an administrator.</p>}
+
+          {ngo.status === 'rejected' && (
+            <p>Your registration was rejected. Contact an administrator.</p>
+          )}
         </div>
       ) : !error ? (
-        <form onSubmit={submit} style={{ display: 'grid', gap: '1rem', maxWidth: 600 }}>
+        <form
+          onSubmit={submit}
+          style={{ display: 'grid', gap: '1rem', maxWidth: 600 }}
+        >
           <p>Register your organization for administrator review.</p>
+
           <label>
             Organization name
-            <input name="name" value={form.name} onChange={field}
-              minLength={2} maxLength={120} required disabled={busy} />
+            <input
+              name="name"
+              value={form.name}
+              onChange={field}
+              minLength={2}
+              maxLength={120}
+              required
+              disabled={busy}
+            />
           </label>
+
           <label>
             Location in Lebanon
-            <input name="location" value={form.location} onChange={field}
-              minLength={2} maxLength={120} required disabled={busy} />
+            <input
+              name="location"
+              value={form.location}
+              onChange={field}
+              minLength={2}
+              maxLength={120}
+              required
+              disabled={busy}
+            />
           </label>
+
+          <label>
+            Organization contact email
+            <input
+              type="email"
+              name="contactEmail"
+              value={form.contactEmail}
+              onChange={field}
+              maxLength={254}
+              autoComplete="email"
+              required
+              disabled={busy}
+            />
+          </label>
+
           <label>
             Description
-            <textarea name="description" value={form.description} onChange={field}
-              minLength={10} maxLength={2000} rows={5} required disabled={busy}
-              style={{ display: 'block', width: '100%' }} />
+            <textarea
+              name="description"
+              value={form.description}
+              onChange={field}
+              minLength={10}
+              maxLength={2000}
+              rows={5}
+              required
+              disabled={busy}
+              style={{ display: 'block', width: '100%' }}
+            />
           </label>
+
           <button type="submit" disabled={busy}>
             {busy ? 'Submitting…' : 'Submit registration'}
           </button>
         </form>
       ) : null}
+
       {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={refresh} disabled={loading || busy}>
+
+      <button
+        type="button"
+        onClick={refresh}
+        disabled={loading || busy}
+      >
         Refresh status
       </button>
     </section>

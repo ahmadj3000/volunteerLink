@@ -4,13 +4,18 @@ from uuid import UUID
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
 
 from auth import current_user
 
 app = FastAPI(title="VolunteerLink NGO API")
+
+INTERNAL_CALLER_ARN = (
+    "arn:aws:sts::281780646139:"
+    "assumed-role/vl-ngo-internal-api-caller/vl-volunteer-api"
+)
 
 
 def require_group(group: str):
@@ -18,6 +23,7 @@ def require_group(group: str):
         if group not in user["groups"]:
             raise HTTPException(403, f"The {group} role is required.")
         return user
+
     return check
 
 
@@ -61,13 +67,16 @@ Location = Annotated[
 
 class Registration(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     name: Name
     description: Description
     location: Location
+    contactEmail: EmailStr
 
 
 class Decision(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     status: Literal["approved", "rejected"]
 
 
@@ -110,6 +119,7 @@ def register(body: Registration, user: dict = Depends(require_group("ngo"))):
         "createdAt": timestamp,
         "updatedAt": timestamp,
     }
+
     try:
         ngos().put_item(
             Item=item,
@@ -117,8 +127,11 @@ def register(body: Registration, user: dict = Depends(require_group("ngo"))):
         )
     except ClientError as error:
         if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            raise HTTPException(409, "Your organization is already registered.") from None
+            raise HTTPException(
+                409, "Your organization is already registered."
+            ) from None
         raise
+
     return {"ngo": item}
 
 
@@ -128,6 +141,7 @@ def list_ngos(
     user: dict = Depends(require_group("admin")),
 ):
     options = {"Limit": 25, "ConsistentRead": True}
+
     if cursor:
         try:
             UUID(cursor)
@@ -171,15 +185,60 @@ def review(
     except ClientError as error:
         if error.response["Error"]["Code"] == "ConditionalCheckFailedException":
             raise HTTPException(
-                409, "This registration no longer exists or has already been reviewed."
+                409,
+                "This registration no longer exists or has already been reviewed.",
             ) from None
         raise
 
     return {"ngo": response["Attributes"]}
 
 
+@app.get("/internal/opportunities/{opportunity_id}")
+def internal_opportunity(opportunity_id: str, request: Request):
+    # Trust this header only because API Gateway overwrites it on the
+    # IAM integration and removes it on every public integration.
+    callers = request.headers.getlist("x-vl-caller-arn")
+    if callers != [INTERNAL_CALLER_ARN]:
+        raise HTTPException(403, "Internal access denied.")
+
+    try:
+        UUID(opportunity_id)
+    except ValueError:
+        raise HTTPException(404, "Opportunity not found.") from None
+
+    table = boto3.resource(
+        "dynamodb", region_name="us-east-1"
+    ).Table("vl-opportunities")
+
+    opportunity = table.get_item(
+        Key={"opportunityId": opportunity_id},
+        ConsistentRead=True,
+    ).get("Item")
+
+    if not opportunity:
+        raise HTTPException(404, "Opportunity not found.")
+
+    organization = ngos().get_item(
+        Key={"ngoId": opportunity["ngoId"]},
+        ConsistentRead=True,
+    ).get("Item") or {}
+
+    return {
+        "opportunityId": opportunity["opportunityId"],
+        "ngoId": opportunity["ngoId"],
+        "title": opportunity["title"],
+        "status": opportunity["status"],
+        "capacity": int(opportunity["capacity"]),
+        "startAt": opportunity["startAt"],
+        "endAt": opportunity["endAt"],
+        "contactEmail": organization.get("contactEmail"),
+    }
+
+
 from opportunities import router as opportunities_router
+
 app.include_router(opportunities_router)
 
-from applications import router as applications_router  # Ahmad: applicant review
+from applications import router as applications_router
+
 app.include_router(applications_router)

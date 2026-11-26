@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ngoApi } from '../../lib/ngo-api'
+import ApplyButton from '../ahmad/ApplyButton'
 
-export default function Opportunities() {
+export default function Opportunities({ isVolunteer = false }) {
   const [items, setItems] = useState([])
   const [cursor, setCursor] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -14,19 +15,21 @@ export default function Opportunities() {
     let active = true
 
     ngoApi('/opportunities')
-      .then(data => {
+      .then((data) => {
         if (!active) return
         setItems(data.items)
         setCursor(data.nextCursor)
       })
-      .catch(error => {
+      .catch((error) => {
         if (active) setError(error.message)
       })
       .finally(() => {
         if (active) setLoading(false)
       })
 
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [])
 
   async function load(more = false) {
@@ -37,14 +40,17 @@ export default function Opportunities() {
       const path = more && cursor
         ? `/opportunities?cursor=${encodeURIComponent(cursor)}`
         : '/opportunities'
+
       const data = await ngoApi(path)
 
-      setItems(previous => {
+      setItems((previous) => {
         const combined = more ? [...previous, ...data.items] : data.items
+
         return [...new Map(
-          combined.map(item => [item.opportunityId, item])
+          combined.map((item) => [item.opportunityId, item]),
         ).values()]
       })
+
       setCursor(data.nextCursor)
     } catch (error) {
       setError(error.message)
@@ -71,12 +77,17 @@ export default function Opportunities() {
     <section className="panel">
       <span className="eyebrow">FIND YOUR NEXT WAY TO HELP</span>
       <h2>Opportunities across Lebanon</h2>
+
       <p>
         Discover opportunities that connect your time and skills
         with communities that need them.
       </p>
 
-      <button type="button" onClick={() => load()} disabled={loading}>
+      <button
+        type="button"
+        onClick={() => load()}
+        disabled={loading}
+      >
         Refresh opportunities
       </button>
 
@@ -85,7 +96,7 @@ export default function Opportunities() {
 
       {!loading && !error && items.length === 0 && (
         <div className="empty-state">
-          <h3>No open opportunities in this page</h3>
+          <h3>No open opportunities on this page</h3>
           <p>
             {cursor
               ? 'Choose Load more to check the next page.'
@@ -94,31 +105,51 @@ export default function Opportunities() {
         </div>
       )}
 
-      {items.map(item => (
+      {items.map((item) => (
         <article
           key={item.opportunityId}
-          style={{ borderTop: '1px solid #dce5df', marginTop: 24, paddingTop: 16 }}
+          style={{
+            borderTop: '1px solid #dce5df',
+            marginTop: 24,
+            paddingTop: 16,
+          }}
         >
           {item.isCrisis && <strong>Urgent crisis response</strong>}
+
           <h3>{item.title}</h3>
-          <p style={{ whiteSpace: 'pre-wrap' }}>{item.description}</p>
+
+          <p style={{ whiteSpace: 'pre-wrap' }}>
+            {item.description}
+          </p>
+
           <p>Location: {item.location}</p>
+
           <p>
             Starts: {new Date(item.startAt).toLocaleString()}
             <br />
             Ends: {new Date(item.endAt).toLocaleString()}
           </p>
+
           <p>Volunteer capacity: {item.capacity}</p>
+
           <p>
             Required skills: {item.skills?.length
               ? item.skills.join(', ')
               : 'No specific skills required'}
           </p>
+
+          {isVolunteer && (
+            <ApplyButton opportunity={item} />
+          )}
         </article>
       ))}
 
       {cursor && (
-        <button type="button" onClick={() => load(true)} disabled={loading}>
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={loading}
+        >
           Load more
         </button>
       )}
@@ -126,18 +157,40 @@ export default function Opportunities() {
       {import.meta.env.DEV && (
         <div style={{ marginTop: 32 }}>
           <h3>Local backend connection test</h3>
-          <button onClick={() => testBackend('/me')} disabled={testBusy}>
+
+          <button
+            type="button"
+            onClick={() => testBackend('/me')}
+            disabled={testBusy}
+          >
             Test authenticated backend
           </button>
-          <button onClick={() => testBackend('/ngo/access')} disabled={testBusy}>
+
+          <button
+            type="button"
+            onClick={() => testBackend('/ngo/access')}
+            disabled={testBusy}
+          >
             Test NGO access
           </button>
-          <button onClick={() => testBackend('/admin/access')} disabled={testBusy}>
+
+          <button
+            type="button"
+            onClick={() => testBackend('/admin/access')}
+            disabled={testBusy}
+          >
             Test admin access
           </button>
+
           {testError && <p role="alert">{testError}</p>}
+
           {testResult && (
-            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                overflowWrap: 'anywhere',
+              }}
+            >
               {JSON.stringify(testResult, null, 2)}
             </pre>
           )}

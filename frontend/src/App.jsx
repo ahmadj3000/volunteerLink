@@ -164,7 +164,7 @@ export default function App() {
           {error && <p role="alert">{error}</p>}
 
           <Routes>
-            <Route path="/" element={<Opportunities />} />
+          <Route path="/" element={<Opportunities isVolunteer={isVolunteer} />} />
             <Route path="/recommendations" element={
               restricted(isVolunteer, <Recommendations />)
             } />
