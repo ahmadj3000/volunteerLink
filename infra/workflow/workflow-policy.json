@@ -1,0 +1,4 @@
+{"Version":"2012-10-17","Statement":[
+ {"Sid":"ApplicationsRow","Effect":"Allow","Action":["dynamodb:GetItem","dynamodb:UpdateItem"],"Resource":"arn:aws:dynamodb:us-east-1:170813308606:table/vl-applications"},
+ {"Sid":"EmailJobs","Effect":"Allow","Action":"sqs:SendMessage","Resource":"arn:aws:sqs:us-east-1:170813308606:vl-email-queue"},
+ {"Sid":"VendedLogs","Effect":"Allow","Action":["logs:CreateLogDelivery","logs:GetLogDelivery","logs:UpdateLogDelivery","logs:DeleteLogDelivery","logs:ListLogDeliveries","logs:PutResourcePolicy","logs:DescribeResourcePolicies","logs:DescribeLogGroups"],"Resource":"*"}]}

@@ -1,0 +1,161 @@
+{
+  "Comment": "VolunteerLink: one execution per application. Notify NGO -> wait for decision (task token) -> one reminder -> expire -> notify volunteer -> event reminder.",
+  "StartAt": "Config",
+  "States": {
+    "Config": {
+      "Type": "Pass",
+      "Comment": "172800 s = 48 h. Set to 120 for the demo to show the reminder/expiry path.",
+      "Result": { "decisionTimeoutSeconds": 172800 },
+      "ResultPath": "$.config",
+      "Next": "Claim"
+    },
+    "Claim": {
+      "Type": "Task",
+      "Comment": "Idempotency: only the first execution for an application claims it. Duplicate events stop here.",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "vl-applications",
+        "Key": { "applicationId": { "S.$": "$.applicationId" } },
+        "UpdateExpression": "SET workflowExecution = :e",
+        "ConditionExpression": "attribute_exists(applicationId) AND attribute_not_exists(workflowExecution)",
+        "ExpressionAttributeValues": { ":e": { "S.$": "$$.Execution.Id" } }
+      },
+      "ResultPath": null,
+      "Retry": [{ "ErrorEquals": ["DynamoDB.ProvisionedThroughputExceededException", "DynamoDB.ThrottlingException", "DynamoDB.InternalServerErrorException"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"], "Next": "Duplicate" }],
+      "Next": "NotifyNgoAndWait"
+    },
+    "Duplicate": { "Type": "Succeed", "Comment": "Another execution already owns this application." },
+    "NotifyNgoAndWait": {
+      "Type": "Task",
+      "Comment": "Pauses until the relay returns this task token (NGO decided) or the timeout fires.",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/170813308606/vl-email-queue",
+        "MessageBody": { "type": "ngo_new_applicant", "applicationId.$": "$.applicationId", "taskToken.$": "$$.Task.Token" }
+      },
+      "TimeoutSecondsPath": "$.config.decisionTimeoutSeconds",
+      "ResultPath": "$.decision",
+      "Retry": [{ "ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.Timeout"], "ResultPath": null, "Next": "CheckAfterFirstWait" }],
+      "Next": "NotifyVolunteer"
+    },
+    "CheckAfterFirstWait": {
+      "Type": "Task",
+      "Comment": "The old token is dead. Read the real status instead of guessing.",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": { "TableName": "vl-applications", "Key": { "applicationId": { "S.$": "$.applicationId" } }, "ConsistentRead": true },
+      "ResultSelector": { "status.$": "$.Item.status.S" },
+      "ResultPath": "$.current",
+      "Next": "StillPendingAfterFirstWait"
+    },
+    "StillPendingAfterFirstWait": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.current.status", "StringEquals": "pending", "Next": "RemindNgoAndWait" }],
+      "Default": "UseCurrentStatus"
+    },
+    "RemindNgoAndWait": {
+      "Type": "Task",
+      "Comment": "Second wait with a NEW token; the worker overwrites the parked one.",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/170813308606/vl-email-queue",
+        "MessageBody": { "type": "ngo_reminder", "applicationId.$": "$.applicationId", "taskToken.$": "$$.Task.Token" }
+      },
+      "TimeoutSecondsPath": "$.config.decisionTimeoutSeconds",
+      "ResultPath": "$.decision",
+      "Retry": [{ "ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["States.Timeout"], "ResultPath": null, "Next": "CheckAfterSecondWait" }],
+      "Next": "NotifyVolunteer"
+    },
+    "CheckAfterSecondWait": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:getItem",
+      "Parameters": { "TableName": "vl-applications", "Key": { "applicationId": { "S.$": "$.applicationId" } }, "ConsistentRead": true },
+      "ResultSelector": { "status.$": "$.Item.status.S" },
+      "ResultPath": "$.current",
+      "Next": "StillPendingAfterSecondWait"
+    },
+    "StillPendingAfterSecondWait": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.current.status", "StringEquals": "pending", "Next": "Expire" }],
+      "Default": "UseCurrentStatus"
+    },
+    "UseCurrentStatus": {
+      "Type": "Pass",
+      "Comment": "The NGO decided around the timeout (race). Continue with the stored decision.",
+      "InputPath": "$.current",
+      "ResultPath": "$.decision",
+      "Next": "NotifyVolunteer"
+    },
+    "Expire": {
+      "Type": "Task",
+      "Comment": "Only a still-pending application can expire; a last-second decision wins.",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Parameters": {
+        "TableName": "vl-applications",
+        "Key": { "applicationId": { "S.$": "$.applicationId" } },
+        "UpdateExpression": "SET #s = :expired, expiredAt = :now REMOVE taskToken",
+        "ConditionExpression": "#s = :pending",
+        "ExpressionAttributeNames": { "#s": "status" },
+        "ExpressionAttributeValues": { ":expired": { "S": "expired" }, ":pending": { "S": "pending" }, ":now": { "S.$": "$$.State.EnteredTime" } }
+      },
+      "ResultPath": null,
+      "Catch": [{ "ErrorEquals": ["DynamoDB.ConditionalCheckFailedException"], "Next": "CheckAfterSecondWait" }],
+      "Next": "NotifyExpired"
+    },
+    "NotifyExpired": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/170813308606/vl-email-queue",
+        "MessageBody": { "type": "expired", "applicationId.$": "$.applicationId" }
+      },
+      "ResultPath": null,
+      "Retry": [{ "ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "End": true
+    },
+    "NotifyVolunteer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/170813308606/vl-email-queue",
+        "MessageBody": { "type": "decision", "applicationId.$": "$.applicationId" }
+      },
+      "ResultPath": null,
+      "Retry": [{ "ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Next": "WasAccepted"
+    },
+    "WasAccepted": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.decision.status", "StringEquals": "accepted", "Next": "ComputeReminderTime" }],
+      "Default": "Done"
+    },
+    "ComputeReminderTime": {
+      "Type": "Pass",
+      "QueryLanguage": "JSONata",
+      "Comment": "reminderAt = event start - 24 h",
+      "Output": "{% $merge([$states.input, {'reminderAt': $fromMillis($toMillis($states.input.opportunityStartAt) - 86400000)}]) %}",
+      "Next": "ReminderStillAhead"
+    },
+    "ReminderStillAhead": {
+      "Type": "Choice",
+      "Comment": "Accepted less than 24 h before the event: skip the reminder.",
+      "Choices": [{ "Variable": "$.reminderAt", "TimestampGreaterThanPath": "$$.State.EnteredTime", "Next": "WaitUntilReminder" }],
+      "Default": "Done"
+    },
+    "WaitUntilReminder": { "Type": "Wait", "TimestampPath": "$.reminderAt", "Next": "EventReminder" },
+    "EventReminder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/170813308606/vl-email-queue",
+        "MessageBody": { "type": "event_reminder", "applicationId.$": "$.applicationId" }
+      },
+      "ResultPath": null,
+      "Retry": [{ "ErrorEquals": ["States.TaskFailed"], "IntervalSeconds": 2, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Next": "Done"
+    },
+    "Done": { "Type": "Succeed" }
+  }
+}

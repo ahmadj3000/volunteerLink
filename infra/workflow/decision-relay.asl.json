@@ -1,0 +1,27 @@
+{
+  "Comment": "VolunteerLink: hands the parked task token back to the paused application workflow when the NGO decides. Input = the application's NewImage from the table stream.",
+  "StartAt": "HasToken",
+  "States": {
+    "HasToken": {
+      "Type": "Choice",
+      "Comment": "No token yet = decided before the worker parked it; the worker returns the token itself.",
+      "Choices": [{ "Variable": "$.taskToken.S", "IsPresent": true, "Next": "Shape" }],
+      "Default": "NoToken"
+    },
+    "NoToken": { "Type": "Succeed" },
+    "Shape": {
+      "Type": "Pass",
+      "Parameters": { "token.$": "$.taskToken.S", "result": { "status.$": "$.status.S" } },
+      "Next": "Resume"
+    },
+    "Resume": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:sfn:sendTaskSuccess",
+      "Parameters": { "TaskToken.$": "$.token", "Output.$": "States.JsonToString($.result)" },
+      "Retry": [{ "ErrorEquals": ["Sfn.SfnException"], "IntervalSeconds": 1, "MaxAttempts": 2, "BackoffRate": 2 }],
+      "Catch": [{ "ErrorEquals": ["Sfn.TaskTimedOutException", "Sfn.InvalidTokenException", "Sfn.TaskDoesNotExistException"], "Next": "TokenGone" }],
+      "End": true
+    },
+    "TokenGone": { "Type": "Succeed", "Comment": "Wait already timed out; the workflow reads the status itself." }
+  }
+}

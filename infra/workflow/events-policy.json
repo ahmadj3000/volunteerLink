@@ -1,0 +1,4 @@
+{"Version":"2012-10-17","Statement":[
+ {"Sid":"StartWorkflows","Effect":"Allow","Action":"states:StartExecution","Resource":[
+   "arn:aws:states:us-east-1:170813308606:stateMachine:vl-application-workflow",
+   "arn:aws:states:us-east-1:170813308606:stateMachine:vl-decision-relay"]}]}
