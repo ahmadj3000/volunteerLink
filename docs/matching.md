@@ -29,7 +29,7 @@ Backends run as **ECS Fargate containers**, not Lambdas. For matching that means
 | `matching/` package, `GET /me/recommendations`, `PUT /internal/opportunities/{id}` | Code only, in this branch |
 | Tables `vl-volunteer-embeddings`, `vl-opportunity-index` | Planned (§7) |
 | Bedrock permission on `vl-volunteer-task-role` | Planned (§7) |
-| NGO → Volunteer opportunity sync | Needs a team decision (§6) |
+| NGO → Volunteer opportunity sync | **Decided: option (a)** (27 Nov 2026); NGO-side call not built yet |
 
 ## 3. Titan access check
 
@@ -179,9 +179,9 @@ calls can't put an older version over a newer one. Times are normalized to fixed
 before comparing. Unknown fields (e.g. `embedding`) → 422. If only the status changed, the
 vector is kept, with no Bedrock call. Any 2xx means "done", so retrying is always safe.
 
-## 6. Team decision: how `vl-opportunity-index` gets filled (Malek + Ahmad)
+## 6. How `vl-opportunity-index` gets filled — DECIDED: option (a), 27 Nov 2026
 
-### (a) NGO backend calls the Volunteer internal route (STS + SigV4) — **recommended**
+### (a) NGO backend calls the Volunteer internal route (STS + SigV4) — **chosen**
 
 After every successful save of an opportunity (create, edit, close), the NGO backend calls
 `PUT /internal/opportunities/{id}` with the saved row.
@@ -280,7 +280,7 @@ VOLUNTEER_EMBEDDINGS_TABLE=vl-volunteer-embeddings
 
 ### 7.4 API Gateway `57bc1lggo1`
 - `GET /me/recommendations` → integration `qlzy375`, authorizer `cognito-jwt` (CORS already allows GET).
-- `PUT /internal/opportunities/{opportunityId}` → integration `x4f0r37`, **AWS_IAM** (only if option (a)).
+- `PUT /internal/opportunities/{opportunityId}` → integration `x4f0r37`, **AWS_IAM**. Must be `x4f0r37` (the integration that overwrites `x-vl-caller-arn` with the verified caller), never `qlzy375`.
 - Role `vl-volunteer-internal-api-caller`: allow
   `execute-api:Invoke` on `arn:aws:execute-api:us-east-1:170813308606:57bc1lggo1/*/PUT/internal/opportunities/*`.
 

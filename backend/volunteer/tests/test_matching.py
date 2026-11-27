@@ -325,6 +325,28 @@ def test_bedrock_down_gives_unranked_list_not_error(catalog, as_user, titan):
     assert starts == sorted(starts)  # soonest first
 
 
+def test_closed_rows_are_skipped_even_if_the_store_returns_them(catalog, as_user, monkeypatch):
+    # The DynamoDB scan already filters status=open; the service checks again.
+    monkeypatch.setattr(store, "open_opportunities", lambda: [copy.deepcopy(o) for o in catalog.index.values()])
+    as_user("vol-1")
+    ids = {i["opportunityId"] for i in client.get("/me/recommendations").json()["items"]}
+    assert ids == {"opp-aid", "opp-food", "opp-drive"}
+
+
+def test_closing_an_opportunity_via_sync_removes_it_from_recommendations(catalog, as_user, ngo_backend):
+    client.put("/internal/opportunities/opp-new",
+               json=sync_body(title="First aid nursing", skills=["first aid", "nursing"]), headers=INTERNAL)
+    as_user("vol-1")
+    ids = [i["opportunityId"] for i in client.get("/me/recommendations").json()["items"]]
+    assert "opp-new" in ids
+    client.put("/internal/opportunities/opp-new",
+               json=sync_body(title="First aid nursing", skills=["first aid", "nursing"],
+                              status="closed", updatedAt="2026-11-28T10:00:00+00:00"),
+               headers=INTERNAL)
+    ids = [i["opportunityId"] for i in client.get("/me/recommendations").json()["items"]]
+    assert "opp-new" not in ids
+
+
 def test_database_down_is_503(catalog, as_user):
     catalog.fail = True
     as_user("vol-1")
@@ -338,6 +360,44 @@ def test_sync_refuses_callers_other_than_the_ngo_backend(db, titan, ngo_backend)
     r = client.put("/internal/opportunities/opp-9", json=sync_body(),
                    headers={"x-vl-caller-arn": "arn:aws:sts::1:assumed-role/someone/else"})
     assert r.status_code == 403
+    assert db.index == {}
+
+
+@pytest.mark.parametrize("caller,expected", [
+    (CALLER, 200),
+    # same role, different session name
+    ("arn:aws:sts::170813308606:assumed-role/vl-volunteer-internal-api-caller/someone", 403),
+    # different role, same session name
+    ("arn:aws:sts::170813308606:assumed-role/AWSReservedSSO_AdministratorAccess_x/vl-ngo-api", 403),
+    # right role path in another account
+    ("arn:aws:sts::281780646139:assumed-role/vl-volunteer-internal-api-caller/vl-ngo-api", 403),
+    (CALLER + " ", 403),
+    ("", 403),
+])
+def test_sync_accepts_only_the_exact_ngo_backend_session(db, titan, ngo_backend, caller, expected):
+    r = client.put("/internal/opportunities/opp-9", json=sync_body(),
+                   headers={"x-vl-caller-arn": caller})
+    assert r.status_code == expected
+    assert ("opp-9" in db.index) == (expected == 200)
+
+
+def test_sync_refused_when_expected_caller_is_not_configured(db, titan, monkeypatch):
+    monkeypatch.delenv("NGO_BACKEND_CALLER_ARN", raising=False)
+    assert client.put("/internal/opportunities/opp-9", json=sync_body(), headers=INTERNAL).status_code == 403
+    assert db.index == {}
+
+
+def test_every_internal_route_refuses_a_missing_or_wrong_caller(db, titan, ngo_backend):
+    import re as regex
+    routes = [(method.upper(), path)
+              for path, ops in app.openapi()["paths"].items() if path.startswith("/internal/")
+              for method in ops]
+    assert ("PUT", "/internal/opportunities/{opportunity_id}") in routes
+    for method, path in routes:
+        url = regex.sub(r"\{[^}]+\}", "opp-1", path)
+        for headers in ({}, {"x-vl-caller-arn": "arn:aws:sts::1:assumed-role/x/vl-ngo-api"}):
+            r = client.request(method, url, json={}, headers=headers)
+            assert r.status_code == 403, (method, path, headers)
     assert db.index == {}
 
 
