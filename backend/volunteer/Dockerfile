@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN useradd --create-home appuser
 COPY *.py ./
+COPY matching/ ./matching/
 USER appuser
 
 EXPOSE 8000
