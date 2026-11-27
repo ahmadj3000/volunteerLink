@@ -39,9 +39,13 @@ Backends run as **ECS Fargate containers**, not Lambdas. For matching that means
 allowed, everything else is blocked. `region-lock.json` only allows us-east-1, which is
 where we call it. `DenyBedrockProvisionedAndTraining` doesn't affect on-demand calls.
 
-**Still to confirm in the Volunteer account (needs a working `vl-vol` SSO profile; this
-machine doesn't have one yet).** `ReadOnlyAccess` can list models but cannot invoke, so
-the last command needs AdministratorAccess or Ahmad:
+**Verified in the Volunteer account — Tarek, 27 Nov 2026** (SSO `tarek.kaadan`,
+AdministratorAccess): `amazon.titan-embed-text-v2:0` is ACTIVE, ON_DEMAND,
+`authorizationStatus: AUTHORIZED`; one test `invoke-model` returned 512 numbers with
+length 1.0 (normalized), 4 input tokens. No resources created.
+
+To repeat (`ReadOnlyAccess` can list models but cannot invoke; the last command needs
+AdministratorAccess):
 
 ```powershell
 aws bedrock list-foundation-models --by-provider amazon --by-output-modality EMBEDDING --query "modelSummaries[].modelId" --profile vl-vol --region us-east-1
